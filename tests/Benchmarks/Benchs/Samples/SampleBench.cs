@@ -1,4 +1,4 @@
-﻿using PragmaStack.Core;
+using PragmaStack.Core;
 using System.Numerics;
 
 namespace Benchmarks.Benchs.Samples;
