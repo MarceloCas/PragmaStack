@@ -1,0 +1,12 @@
+﻿using System.Numerics;
+
+namespace PragmaStack.Core;
+
+public class SampleClass
+{
+    public static INumber<T> AddNumbers<T>(T a, T b) 
+        where T : INumber<T>
+    {
+        return a + b;
+    }
+}
