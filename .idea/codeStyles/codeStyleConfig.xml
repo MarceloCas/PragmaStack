@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+    <component name="ProjectCodeStyleConfiguration">
+        <state>
+            <option name="LINE_SEPARATOR" value="\n" />
+        </state>
+    </component>
+    <component name="EditorConfigProjectConfiguration">
+        <state>
+            <option name="ENABLED" value="true" />
+        </state>
+    </component>
+    <component name="ProjectRootUtil">
+        <option name="PROJECT_ROOT" value="$PROJECT_DIR$" />
+    </component>
+</project>
