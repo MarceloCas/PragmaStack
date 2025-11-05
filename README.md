@@ -1,6 +1,15 @@
 # PragmaStack
 
 [![CI](https://github.com/MarceloCas/PragmaStack/actions/workflows/ci.yml/badge.svg)](https://github.com/MarceloCas/PragmaStack/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=bugs)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=coverage)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
 
 Meu nome é Marcelo Castelo Branco (https://www.linkedin.com/in/marcelocastelobranco/), sou desenvolvedor de software há alguns anos e já atuei em bastante projeto de software.
 
