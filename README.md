@@ -1,36 +1,107 @@
-# PragmaStack
+# 🚀 PragmaStack
 
 [![CI](https://github.com/MarceloCas/PragmaStack/actions/workflows/ci.yml/badge.svg)](https://github.com/MarceloCas/PragmaStack/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
-[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=bugs)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
-[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=coverage)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
-[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
-[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
 [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
-[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=MarceloCas_PragmaStack&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/download)
 
-Meu nome é Marcelo Castelo Branco (https://www.linkedin.com/in/marcelocastelobranco/), sou desenvolvedor de software há alguns anos e já atuei em bastante projeto de software.
+---
 
-Com o passar do tempo e dos projetos, percebi que muitos problemas comuns de desenvolvimento poderiam ser evitados se tivéssemos algumas práticas e metodologias bem definidas.
+## 👋 Sobre
 
-Independente do tamanho do projeto, acredito que seguir boas práticas de desenvolvimento é essencial para garantir a qualidade, manutenibilidade e escalabilidade do software.
+Olá! Meu nome é **Marcelo Castelo Branco** ([LinkedIn](https://www.linkedin.com/in/marcelocastelobranco/)), e sou desenvolvedor de software há alguns anos. Já trabalhei em diversos projetos de software com diferentes contextos e desafios.
 
-Existem problemas que se repetem em qualquer projeto e time de desenvolvimento de software.
+> 💡 Este repositório nasceu da percepção de que **muitos problemas comuns do desenvolvimento podem ser evitados** com práticas e metodologias bem definidas.
 
-Como hobby, decidi criar este repositório para compartilhar algumas das metodologias e boas práticas que adotei ao longo do tempo.
+---
 
-Também pretendo incluir algumas ferramentas e templates que podem ajudar no dia a dia do desenvolvimento de software, tanto para outras empresas, quanto para os meus próprios projetos pessoais.
+## 📌 Sobre a Documentação
 
-Vale ressaltar que as metodologias e práticas aqui documentadas foram desenvolvidas e adotadas por mim ao longo do tempo, baseadas na minha experiência pessoal e profissional. Elas podem não ser aplicáveis a todos os contextos ou projetos, mas acredito que podem servir como um ponto de partida útil para outros desenvolvedores.
+> 🤖 **Transparência Total:** Todos os textos desta documentação foram **concebidos, pensados e validados por mim** (desenvolvedor). A IA é utilizada **apenas como ferramenta de revisão e formatação**, garantindo clareza, organização visual e qualidade de apresentação.
+>
+> **Processo:** Conteúdo técnico e ideias são 100% minhas → Revisão e formatação pela IA → Validação e aprovação final por mim
+>
+> **Resultado:** Documentação autêntica com conteúdo real, não textos genéricos gerados por IA.
 
-Não tratem as recomendações aqui como regras rígidas e imutáveis vindo de alguém que se diz especialista, mas sim como sugestões que podem ser adaptadas conforme as necessidades específicas de cada projeto.
+---
 
-## Documentação
+## 🎯 Objetivo
 
-O termo "boas práticas", no meu ponto de vista, vem sido usado de forma muito leviana ao longo do tempo. Para algo ser considerado "boa prática", significa que aquela solução foi validada em determinado CONTEXTO e foi, comprovadamente, uma solução que trouxe benefícios reais com trade-offs aceitáveis.
+Este projeto é um compilado de **metodologias e boas práticas** que adotei ao longo da minha carreira. É um espaço para compartilhar conhecimento, ferramentas e templates que podem ajudar:
 
-Para que eu não repita essa leviandade, decidi documentar cada metodologia e prática que adotei, explicando o CONTEXTO em que ela foi aplicada, os PROBLEMAS que ela resolve, os BENEFÍCIOS que ela traz e os TRADE-OFFS envolvidos.
+- ✨ Melhorar a **qualidade** do seu software
+- 📈 Aumentar a **manutenibilidade** dos projetos
+- 🔒 Fortalecer a **segurança** das aplicações
+- 🧪 Garantir **cobertura de testes** adequada
+- 🔧 Facilitar a **escalabilidade** das aplicações
+- 🤝 Promover boas práticas em equipes de desenvolvimento
 
-Você pode encontrar a documentação completa na pasta `docs` deste repositório.
+### Por que isso importa?
+
+Independente do tamanho do projeto, seguir boas práticas é essencial para garantir:
+- **Qualidade**: Código confiável e funcional
+- **Manutenibilidade**: Fácil de entender, modificar e debugar
+- **Segurança**: Protegido contra vulnerabilidades
+- **Escalabilidade**: Preparado para crescimento e mudanças
+
+---
+
+## 📚 Documentação
+
+O termo "boas práticas" é frequentemente usado de forma muito leviana. Para mim, uma **verdadeira boa prática** é aquela que:
+
+✅ Foi validada em um **CONTEXTO** específico  
+✅ Resolve **PROBLEMAS** reais e comprovados  
+✅ Traz **BENEFÍCIOS** mensuráveis  
+✅ Tem **TRADE-OFFS** aceitos e documentados  
+
+### Como está organizado
+
+Cada metodologia e prática está documentada explicando:
+
+| Aspecto | Descrição |
+|---------|-----------|
+| 📍 **CONTEXTO** | Em qual situação a prática foi aplicada |
+| 🔴 **PROBLEMAS** | Quais problemas ela resolve |
+| 💚 **BENEFÍCIOS** | Quais ganhos reais são obtidos |
+| ⚖️ **TRADE-OFFS** | Quais são os compromissos envolvidos |
+
+A documentação completa está disponível na pasta [`docs/`](./docs/README.md).
+
+---
+
+## 📊 Qualidade & Cobertura
+
+Este projeto mantém altos padrões de qualidade com:
+
+- **CI/CD**: Pipeline automático de integração e entrega contínua
+- **SonarCloud**: Análise contínua de código e segurança
+- **Testes**: Cobertura de testes e benchmarks de performance
+- **Segurança**: Avaliação e mitigação de vulnerabilidades
+
+---
+
+## 📝 Disclaimer
+
+> ⚠️ **Importante:** As recomendações aqui documentadas foram desenvolvidas baseadas na minha experiência pessoal e profissional. **Não as trate como regras rígidas e imutáveis**, mas sim como **sugestões que podem ser adaptadas** conforme as necessidades específicas do seu projeto e contexto.
+
+Estas práticas podem não ser aplicáveis a todos os cenários, mas acredito que podem servir como um **ponto de partida útil** para novos desenvolvedores e equipes.
+
+---
+
+## 🔗 Links Úteis
+
+- 📖 [Documentação Completa](./docs/README.md)
+- 🔄 [CI/CD Pipeline](https://github.com/MarceloCas/PragmaStack/actions)
+- 🔍 [Análise de Código - SonarCloud](https://sonarcloud.io/summary/new_code?id=MarceloCas_PragmaStack)
+- 👤 [Autor - LinkedIn](https://www.linkedin.com/in/marcelocastelobranco/)
+
+---
+
+<div align="center">
+
+**Desenvolvido com ❤️ por Marcelo Castelo Branco**
+
+</div>
