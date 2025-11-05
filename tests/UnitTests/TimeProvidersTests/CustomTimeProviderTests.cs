@@ -17,6 +17,20 @@ public class CustomTimeProviderTests
     }
 
     [Fact]
+    public void GetUtcNow_FromDefaultInstance_ShouldReturnCurrentUtcTime_WhenNoFuncIsProvided()
+    {
+        // Arrange
+        var timeProvider = PragmaStack.Core.TimeProviders.CustomTimeProvider.DefaultInstance;
+
+        // Act
+        var actualTime = timeProvider.GetUtcNow();
+        var expectedTime = DateTimeOffset.UtcNow;
+
+        // Assert
+        (actualTime - expectedTime).ShouldBeLessThan(TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
     public void GetUtcNow_ShouldReturnCustomTime_WhenFuncIsProvided()
     {
         // Arrange

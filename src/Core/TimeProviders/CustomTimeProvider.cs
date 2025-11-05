@@ -7,6 +7,7 @@ public class CustomTimeProvider
     private readonly Func<TimeZoneInfo?, DateTimeOffset>? _utcNowFunc;
 
     // Properties
+    public static CustomTimeProvider DefaultInstance { get; } = new(utcNowFunc: null, localTimeZone: null);
     public override TimeZoneInfo LocalTimeZone { get; }
 
     // Constructors
