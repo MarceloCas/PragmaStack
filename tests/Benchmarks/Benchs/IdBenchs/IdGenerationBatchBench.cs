@@ -10,58 +10,59 @@ namespace Benchmarks.Benchs.IdBenchs;
 public class IdGenerationBatchBench
     : BenchmarkBase
 {
-    private List<Guid> _results;
-
     [Params(10, 100, 1000, 10000)]
     public int BatchSize { get; set; }
 
-    [GlobalSetup]
-    public void Setup()
-    {
-        _results = new List<Guid>(BatchSize);
-    }
-
     [Benchmark(Baseline = true, Description = "Guid.NewGuid() em lote (Guid V4)")]
-    public void GuidCreateVersion4_Batch()
+    public Guid GuidCreateVersion4_Batch()
     {
-        _results.Clear();
+        Guid lastResult = Guid.Empty;
 
         for (int i = 0; i < BatchSize; i++)
         {
-            _results.Add(Guid.NewGuid());
+            lastResult = Guid.NewGuid();
         }
+
+        return lastResult;
     }
 
     [Benchmark(Description = "Guid.CreateVersion7() em lote")]
-    public void GuidCreateVersion7_Batch()
+    public Guid GuidCreateVersion7_Batch()
     {
-        _results.Clear();
+        Guid lastResult = Guid.Empty;
 
         for (int i = 0; i < BatchSize; i++)
         {
-            _results.Add(Guid.CreateVersion7());
+            lastResult = Guid.CreateVersion7();
         }
+
+        return lastResult;
     }
 
     [Benchmark(Description = "Id.GenerateNewId() em lote")]
-    public void GenerateNewId_Batch()
+    public Guid GenerateNewId_Batch()
     {
-        _results.Clear();
+        Guid lastResult = Guid.Empty;
 
         for (int i = 0; i < BatchSize; i++)
         {
-            _results.Add(PragmaStack.Core.Ids.Id.GenerateNewId());
+            lastResult = PragmaStack.Core.Ids.Id.GenerateNewId();
         }
+
+        return lastResult;
     }
 
+
     [Benchmark(Description = "Id.GenerateNewGlobalId() em lote")]
-    public void GenerateNewGlobalId_Batch()
+    public Guid GenerateNewGlobalId_Batch()
     {
-        _results.Clear();
+        Guid lastResult = Guid.Empty;
 
         for (int i = 0; i < BatchSize; i++)
         {
-            _results.Add(PragmaStack.Core.Ids.Id.GenerateNewGlobalId());
+            lastResult = PragmaStack.Core.Ids.Id.GenerateNewGlobalId();
         }
+
+        return lastResult;
     }
 }
