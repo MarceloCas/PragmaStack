@@ -51,18 +51,4 @@ public class IdGenerationBatchBench
 
         return lastResult;
     }
-
-
-    [Benchmark(Description = "Id.GenerateNewGlobalId() em lote")]
-    public Guid GenerateNewGlobalId_Batch()
-    {
-        Guid lastResult = Guid.Empty;
-
-        for (int i = 0; i < BatchSize; i++)
-        {
-            lastResult = PragmaStack.Core.Ids.Id.GenerateNewGlobalId();
-        }
-
-        return lastResult;
-    }
 }

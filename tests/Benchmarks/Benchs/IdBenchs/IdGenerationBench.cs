@@ -33,10 +33,4 @@ public class IdGenerationBench
     {
         return PragmaStack.Core.Ids.Id.GenerateNewId();
     }
-
-    [Benchmark(Description = "Id.GenerateNewGlobalId() (Global Monotonic)")]
-    public PragmaStack.Core.Ids.Id GenerateNewGlobalId()
-    {
-        return PragmaStack.Core.Ids.Id.GenerateNewGlobalId();
-    }
 }

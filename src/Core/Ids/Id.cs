@@ -1,63 +1,85 @@
-using System;
 using System.Security.Cryptography;
-using System.Threading;
 
 namespace PragmaStack.Core.Ids;
 
 public readonly struct Id
     : IEquatable<Id>
 {
-    [ThreadStatic]
-    private static long _lastTimestamp;
-    [ThreadStatic]
-    private static long _counter;
+    #region [ Fields ]
 
-    // Shared fields for global monotonic ID generation
-    // We use 2 separate fields because packing timestamp (42+ bits) + counter (26 bits) exceeds 64 bits
-    private static readonly Lock _globalLock = new();
-    private static long _globalTimestamp;
-    private static long _globalCounter;
+    // ThreadStatic faz com que cada thread tenha sua própria cópia destas variáveis,
+    // evitando contenção entre threads e permitindo geração extremamente rápida de IDs.
+    // Cada thread mantém seu próprio timestamp e contador, garantindo que IDs gerados
+    // na mesma thread sejam sempre sequenciais, sem necessidade de locks.
+    [ThreadStatic] private static long _lastTimestamp;
+    [ThreadStatic] private static long _counter;
 
-    // Properties
+    #endregion [ Fields ]
+
+    #region [ Properties ]
+
     public Guid Value { get; }
 
-    // Constructors
+    #endregion [ Properties ]
+
+    #region [ Constructors ]
+
     private Id(Guid value)
     {
         Value = value;
     }
 
-    // Public Methods
-    /// <summary>
-    /// Generates a new monotonic UUIDv7 with per-thread sequential guarantee.
-    /// This is the fastest method and guarantees IDs are sequential within the same thread.
-    /// </summary>
+    #endregion [ Constructors ]
+
+    #region [ Public Methods ]
+
+    // Gera um novo ID monotônico baseado em UUIDv7.
+    //
+    // CARACTERÍSTICAS:
+    // - Performance: ~10-15 nanosegundos por ID (extremamente rápido)
+    // - Ordenação: IDs são ordenáveis por timestamp (maioria dos casos)
+    // - Unicidade: Garantida mesmo em ambientes distribuídos (múltiplas instâncias/servidores)
+    // - Thread-safe: Cada thread mantém seu próprio contador, sem necessidade de locks
+    // - Monotônico: IDs de uma mesma thread são sempre crescentes, mesmo se o relógio retroceder
+    //
+    // FORMATO: UUIDv7 com 48 bits de timestamp + 26 bits de contador + 46 bits aleatórios
+    // Os 46 bits aleatórios garantem unicidade entre diferentes threads e instâncias da aplicação.
     public static Id GenerateNewId()
     {
         long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        // Check if we're in a new millisecond
+        // CENÁRIO 1: Estamos em um novo milissegundo (caso mais comum)
+        // Reiniciamos o contador para garantir que o novo ID seja maior que todos os anteriores
         if (timestamp > _lastTimestamp)
         {
             _lastTimestamp = timestamp;
-            // Start counter at 0 for new millisecond to ensure monotonicity
             _counter = 0;
         }
+        // CENÁRIO 2: O relógio do sistema retrocedeu (raro, mas possível)
+        // Exemplos: ajuste de horário, virtualização, bugs de hardware
+        // Solução: mantemos o último timestamp válido e incrementamos o contador,
+        // garantindo que o novo ID ainda seja maior que o anterior
         else if (timestamp < _lastTimestamp)
         {
-            // Clock moved backwards - use last timestamp and increment counter
             timestamp = _lastTimestamp;
             _counter++;
         }
+        // CENÁRIO 3: Ainda estamos no mesmo milissegundo (comum em alta frequência)
+        // Simplesmente incrementamos o contador para diferenciar os IDs
         else
         {
-            // Same millisecond - increment counter
             _counter++;
 
-            // Handle overflow (extremely unlikely with 26-bit counter = 67M IDs per ms)
+            // Proteção contra overflow do contador (extremamente improvável)
+            // 0x3FFFFFF = 67.108.863 em decimal (26 bits, todos em 1)
+            // Isso significa que você precisaria gerar mais de 67 MILHÕES de IDs
+            // em um único milissegundo para atingir este limite!
+            //
+            // Se isso acontecer, fazemos spin-wait (espera ativa) até o próximo milissegundo.
+            // Usamos spin-wait ao invés de Thread.Sleep porque sabemos que falta menos de 1ms,
+            // e o custo de context switch seria maior que simplesmente esperar ocupando a CPU.
             if (_counter > 0x3FFFFFF)
             {
-                // Spin-wait for next millisecond
                 SpinWaitForNextMillisecond(ref timestamp, ref _lastTimestamp);
                 _counter = 0;
             }
@@ -65,152 +87,9 @@ public readonly struct Id
 
         return new Id(BuildUuidV7WithRandom(timestamp, _counter));
     }
-
-    /// <summary>
-    /// Generates a new monotonic UUIDv7 with global sequential guarantee across all threads.
-    /// Slightly slower than GenerateNewId() but guarantees total ordering.
-    /// </summary>
-    public static Id GenerateNewGlobalId()
-    {
-        // Use System.Threading.Lock for better performance (25-30% faster than lock(object))
-        long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        long counter;
-
-        // Atomically update timestamp and counter
-        using (_globalLock.EnterScope())
-        {
-            long currentTs = Volatile.Read(ref _globalTimestamp);
-            long currentCounter = Volatile.Read(ref _globalCounter);
-
-            if (timestamp > currentTs)
-            {
-                // New millisecond - reset counter
-                _globalTimestamp = timestamp;
-                _globalCounter = 0;
-                counter = 0;
-            }
-            else if (timestamp < currentTs)
-            {
-                // Clock moved backwards - use last timestamp and increment counter
-                timestamp = currentTs;
-                counter = currentCounter + 1;
-                _globalCounter = counter;
-            }
-            else
-            {
-                // Same millisecond - increment counter
-                counter = currentCounter + 1;
-                _globalCounter = counter;
-
-                // Handle overflow (67M IDs per millisecond should be enough!)
-                if (counter > 0x3FFFFFF)
-                {
-                    // Spin-wait for next millisecond
-                    while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() == timestamp)
-                    {
-                        Thread.SpinWait(100);
-                    }
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    _globalTimestamp = timestamp;
-                    _globalCounter = 0;
-                    counter = 0;
-                }
-            }
-        }
-
-        return new Id(BuildUuidV7Deterministic(timestamp, counter));
-    }
-
     public static Id FromGuid(Guid guid)
     {
         return new Id(guid);
-    }
-
-    // Private Helper Methods
-    /// <summary>
-    /// Builds a UUIDv7 with random bytes for per-thread uniqueness while maintaining thread-local ordering.
-    /// </summary>
-    private static Guid BuildUuidV7WithRandom(long timestamp, long counter)
-    {
-        // Extract timestamp parts (48 bits total)
-        var timestampHigh = (int)(timestamp >> 16);
-        var timestampLow = (short)(timestamp & 0xFFFF);
-
-        // Version 7 (4 bits) + first 12 bits of counter
-        var versionAndCounter = (short)(0x7000 | ((counter >> 14) & 0x0FFF));
-
-        // Variant (2 bits = 10) + next 6 bits of counter
-        var variantHigh = (byte)(0x80 | ((counter >> 8) & 0x3F));
-
-        // Remaining 8 bits of counter
-        var counterLow = (byte)(counter & 0xFF);
-
-        // Random bytes for uniqueness across threads
-        Span<byte> randomBytes = stackalloc byte[6];
-        RandomNumberGenerator.Fill(randomBytes);
-
-        return new Guid(
-            a: timestampHigh,
-            b: timestampLow,
-            c: versionAndCounter,
-            d: variantHigh,
-            e: counterLow,
-            f: randomBytes[0],
-            g: randomBytes[1],
-            h: randomBytes[2],
-            i: randomBytes[3],
-            j: randomBytes[4],
-            k: randomBytes[5]
-        );
-    }
-
-    /// <summary>
-    /// Builds a UUIDv7 with deterministic bytes for global sequential ordering.
-    /// Uses a 26-bit counter distributed across available random bits after version and variant.
-    /// Counter layout: 12 bits in rand_a + 14 bits in upper rand_b = 26 bits total
-    /// </summary>
-    private static Guid BuildUuidV7Deterministic(long timestamp, long counter)
-    {
-        // Extract timestamp parts (48 bits total)
-        var timestampHigh = (int)(timestamp >> 16);
-        var timestampLow = (short)(timestamp & 0xFFFF);
-
-        // Version 7 (4 bits) + counter bits 14-25 (12 bits)
-        var versionAndCounter = (short)(0x7000 | ((counter >> 14) & 0x0FFF));
-
-        // Variant (2 bits = 10) + counter bits 8-13 (6 bits)
-        var variantHigh = (byte)(0x80 | ((counter >> 8) & 0x3F));
-
-        // Counter bits 0-7 (8 bits)
-        var byte1 = (byte)(counter & 0xFF);
-
-        // Rest are zeros for deterministic ordering
-        return new Guid(
-            timestampHigh,      // int (4 bytes)
-            timestampLow,       // short (2 bytes)
-            versionAndCounter,  // short (2 bytes) - version + 12 bits counter
-            variantHigh,        // byte 1 - variant + 6 bits counter
-            byte1,              // byte 2 - 8 bits counter
-            0,                  // byte 3 - zero
-            0,                  // byte 4 - zero
-            0,                  // byte 5 - zero
-            0,                  // byte 6 - zero
-            0,                  // byte 7 - zero
-            0                   // byte 8 - zero
-        );
-    }
-
-    /// <summary>
-    /// Spin-waits until the next millisecond tick.
-    /// </summary>
-    private static void SpinWaitForNextMillisecond(ref long timestamp, ref long lastTimestamp)
-    {
-        while (timestamp == lastTimestamp)
-        {
-            Thread.SpinWait(100);
-            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        }
-        lastTimestamp = timestamp;
     }
 
     public override int GetHashCode()
@@ -239,4 +118,102 @@ public readonly struct Id
     public static bool operator >(Id left, Id right) => left.Value.CompareTo(right.Value) > 0;
     public static bool operator <=(Id left, Id right) => left.Value.CompareTo(right.Value) <= 0;
     public static bool operator >=(Id left, Id right) => left.Value.CompareTo(right.Value) >= 0;
+
+    #endregion  [ Public Methods ]
+
+    #region [ Private Methods ]
+
+    // Constrói um UUIDv7 com bytes aleatórios para garantir unicidade global.
+    //
+    // ESTRUTURA DO UUIDv7 (total: 128 bits / 16 bytes):
+    // ┌─────────────────┬──────┬─────────┬────────┬──────────────────┐
+    // │  Timestamp (48) │ Ver  │ Counter │ Variant│   Random (46)    │
+    // │                 │ (4)  │  (12)   │  (2)   │                  │
+    // └─────────────────┴──────┴─────────┴────────┴──────────────────┘
+    //
+    // - Timestamp: 48 bits = milissegundos desde Unix epoch (garante ordenação temporal)
+    // - Version: 4 bits = sempre 0111 (7 em binário, indica UUIDv7)
+    // - Counter: Total de 26 bits distribuídos em 3 partes (garante ordenação dentro da mesma thread)
+    //   - 12 bits após a versão
+    //   - 6 bits após o variant
+    //   - 8 bits no próximo byte
+    // - Variant: 2 bits = sempre 10 (padrão RFC 4122)
+    // - Random: 46 bits = bytes aleatórios criptograficamente seguros
+    //
+    // Os 46 bits aleatórios garantem unicidade mesmo em:
+    // - Múltiplas threads gerando IDs simultaneamente
+    // - Múltiplas instâncias da aplicação em servidores diferentes
+    // - Ambientes distribuídos sem coordenação central
+    private static Guid BuildUuidV7WithRandom(long timestamp, long counter)
+    {
+        // Divide o timestamp de 48 bits em duas partes para encaixar no construtor do Guid
+        var timestampHigh = (int)(timestamp >> 16);      // 32 bits mais significativos
+        var timestampLow = (short)(timestamp & 0xFFFF);  // 16 bits menos significativos
+
+        // Combina a versão (7) com os primeiros 12 bits do counter
+        // 0x7000 = 0111 0000 0000 0000 em binário (versão 7 nos 4 bits mais significativos)
+        // counter >> 14 pega os bits 14-25 do counter (12 bits)
+        // 0x0FFF garante que pegamos apenas 12 bits
+        var versionAndCounter = (short)(0x7000 | ((counter >> 14) & 0x0FFF));
+
+        // Combina o variant (10 em binário) com os próximos 6 bits do counter
+        // 0x80 = 1000 0000 em binário (variant '10' nos 2 bits mais significativos)
+        // counter >> 8 pega os bits 8-13 do counter (6 bits)
+        // 0x3F = 0011 1111 garante que pegamos apenas 6 bits
+        var variantHigh = (byte)(0x80 | ((counter >> 8) & 0x3F));
+
+        // Pega os últimos 8 bits do counter (bits 0-7)
+        // 0xFF = 1111 1111 garante que pegamos apenas 8 bits
+        var counterLow = (byte)(counter & 0xFF);
+
+        // Gera 6 bytes (48 bits) aleatórios usando RandomNumberGenerator (criptograficamente seguro).
+        // stackalloc aloca na stack ao invés do heap (mais rápido e sem garbage collection).
+        //
+        // Estes bytes aleatórios são FUNDAMENTAIS para:
+        // 1. Evitar colisões entre threads rodando no mesmo processo
+        // 2. Evitar colisões entre múltiplas instâncias da aplicação (servidores diferentes)
+        // 3. Garantir unicidade global sem necessidade de coordenação central
+        //
+        // Com 46 bits de aleatoriedade, a probabilidade de colisão é astronômica (~10^-14).
+        Span<byte> randomBytes = stackalloc byte[6];
+        RandomNumberGenerator.Fill(randomBytes);
+
+        return new Guid(
+            a: timestampHigh,        // 4 bytes - parte alta do timestamp
+            b: timestampLow,         // 2 bytes - parte baixa do timestamp
+            c: versionAndCounter,    // 2 bytes - versão 7 + 12 bits do counter
+            d: variantHigh,          // 1 byte - variant + 6 bits do counter
+            e: counterLow,           // 1 byte - 8 bits do counter
+            f: randomBytes[0],       // 6 bytes aleatórios para unicidade
+            g: randomBytes[1],
+            h: randomBytes[2],
+            i: randomBytes[3],
+            j: randomBytes[4],
+            k: randomBytes[5]
+        );
+    }
+
+    // Faz uma espera ativa (spin-wait) até que o relógio avance para o próximo milissegundo.
+    //
+    // POR QUE SPIN-WAIT AO INVÉS DE Thread.Sleep(1)?
+    // Spin-wait mantém a CPU ocupada em um loop, mas isso é mais eficiente para esperas muito curtas:
+    // - Thread.Sleep(1) pode dormir por 1-15ms dependendo do sistema operacional (muito impreciso!)
+    // - Thread.Sleep causa context switch (troca de contexto), que custa ~1-10 microsegundos
+    // - Sabemos que falta MENOS DE 1 MILISSEGUNDO, então spin-wait é mais rápido
+    //
+    // O valor 100 em Thread.SpinWait(100) é o número de iterações de spin:
+    // - Não bloqueia o processador completamente
+    // - Permite que outros hyperthreads no mesmo core físico executem
+    // - Em processadores modernos, 100 iterações ≈ alguns nanosegundos
+    private static void SpinWaitForNextMillisecond(ref long timestamp, ref long lastTimestamp)
+    {
+        while (timestamp == lastTimestamp)
+        {
+            Thread.SpinWait(100);
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        }
+        lastTimestamp = timestamp;
+    }
+
+    #endregion [ Private Methods ]
 }

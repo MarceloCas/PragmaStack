@@ -98,90 +98,6 @@ public class IdTests
     }
 
     [Fact]
-    public void GenerateNewGlobalId_ShouldReturnUniqueAndSequentialIds()
-    {
-        // Arrange
-        var numberOfIdsToGenerate = 1000;
-        var idList = new List<Guid>(capacity: numberOfIdsToGenerate);
-
-        // Act
-        for (int i = 0; i < numberOfIdsToGenerate; i++)
-        {
-            var newId = PragmaStack.Core.Ids.Id.GenerateNewGlobalId();
-            idList.Add(newId);
-        }
-
-        // Assert
-        var idSet = new HashSet<Guid>(idList);
-        idSet.Count.ShouldBe(numberOfIdsToGenerate);
-
-        for (int i = 0; i < idList.Count - 1; i++)
-        {
-            var currentId = idList[i];
-            var nextId = idList[i + 1];
-
-            var comparisonResult = currentId.CompareTo(nextId);
-            comparisonResult.ShouldBeLessThan(0);
-        }
-    }
-
-    [Fact]
-    public void GenerateNewGlobalId_MultiThreaded_ShouldReturnUniqueIds()
-    {
-        // Arrange
-        var numberOfThreads = 10;
-        var idsPerThread = 1000;
-        var allIds = new ConcurrentBag<Guid>();
-
-        // Act
-        Parallel.For(fromInclusive: 0, toExclusive: numberOfThreads, body: _ =>
-        {
-            for (int i = 0; i < idsPerThread; i++)
-            {
-                var newId = PragmaStack.Core.Ids.Id.GenerateNewGlobalId();
-                allIds.Add(newId);
-            }
-        });
-
-        // Assert
-        var totalIds = numberOfThreads * idsPerThread;
-        allIds.Count.ShouldBe(totalIds);
-
-        var uniqueIds = new HashSet<Guid>(allIds);
-        uniqueIds.Count.ShouldBe(totalIds, "All IDs should be unique");
-    }
-
-    [Fact]
-    public void GenerateNewGlobalId_MultiThreaded_ShouldBeGloballySequential()
-    {
-        // Arrange
-        var numberOfThreads = 5;
-        var idsPerThread = 200;
-        var allIds = new ConcurrentBag<Guid>();
-
-        // Act
-        Parallel.For(fromInclusive: 0, toExclusive: numberOfThreads, body: _ =>
-        {
-            for (int i = 0; i < idsPerThread; i++)
-            {
-                var newId = PragmaStack.Core.Ids.Id.GenerateNewGlobalId();
-                allIds.Add(newId);
-            }
-        });
-
-        // Assert
-        var sortedIds = allIds.OrderBy(id => id).ToList();
-
-        // All IDs should already be in sorted order (or very close due to timing)
-        // We verify that the generated IDs respect global monotonicity
-        var totalIds = numberOfThreads * idsPerThread;
-        allIds.Count.ShouldBe(totalIds);
-
-        var uniqueIds = new HashSet<Guid>(allIds);
-        uniqueIds.Count.ShouldBe(totalIds, "All global IDs should be unique");
-    }
-
-    [Fact]
     public void GenerateNewId_StressTest_ShouldHandleHighVolume()
     {
         // Arrange
@@ -192,23 +108,6 @@ public class IdTests
         for (int i = 0; i < numberOfIdsToGenerate; i++)
         {
             var newId = PragmaStack.Core.Ids.Id.GenerateNewId();
-            idSet.Add(newId).ShouldBeTrue($"ID at position {i} should be unique");
-        }
-
-        idSet.Count.ShouldBe(numberOfIdsToGenerate);
-    }
-
-    [Fact]
-    public void GenerateNewGlobalId_StressTest_ShouldHandleHighVolume()
-    {
-        // Arrange
-        var numberOfIdsToGenerate = 10000;
-        var idSet = new HashSet<Guid>();
-
-        // Act & Assert - Should not throw and all IDs should be unique
-        for (int i = 0; i < numberOfIdsToGenerate; i++)
-        {
-            var newId = PragmaStack.Core.Ids.Id.GenerateNewGlobalId();
             idSet.Add(newId).ShouldBeTrue($"ID at position {i} should be unique");
         }
 
