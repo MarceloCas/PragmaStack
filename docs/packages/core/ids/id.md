@@ -1405,25 +1405,18 @@ Economia: ~10 segundos (67% mais rápido end-to-end)
 
 #### **Pergunta 3: Por que o ULID não é uma alternativa?**
 
-> "ULID é uma string bonitinha e ordenável, não dá para usar ela no lugar do `Id`?"
+> "ULID é curto, legível e ordenável. Podemos adotar no lugar do `Id`?"
 
-Imagine dois times em uma corrida de revezamento:
+ULID resolve um problema diferente do que o `Id` se propõe a solucionar. Ele é excelente para expor chaves em URLs, QR codes ou logs porque o formato Base32 Crockford é compacto e fácil de comunicar. Contudo, quando usamos ULID como identificador principal no banco ou no barramento, herdamos os mesmos custos e riscos do `Guid` aleatório — com alguns acréscimos:
 
-- **Time ULID** corre segurando um bastão gigante feito de Lego. Ele é colorido, dá para enxergar de longe e cabe direitinho em uma mochila HTTP/1.1 apertada.
-- **Time `Id`** corre com um bastão de fibra de carbono, já no formato certo para a pista dos bancos de dados.
+1. **Monotonicidade insuficiente:** ULID combina timestamp + aleatoriedade, como um UUIDv4 com prefixo temporal. Dentro do mesmo milissegundo a ordenação continua instável, exatamente o problema que resolvemos com o contador monotônico por thread do `Id`.
+2. **Sensibilidade a clock drift:** Oscilações de relógio causam buracos ou regressões na sequência, tal como ocorre no UUIDv4. O contador do `Id` impede esse recuo, mantendo a ordenação consistente.
+3. **Custo de geração e parse:** Para aproveitar o formato curto do ULID é preciso codificar/decodificar strings Base32 de 26 caracteres. Cada conversão adiciona alocações e trabalho extra de CPU/GC quando comparado ao `Id`, que trafega em binário e só formata texto sob demanda.
+4. **Armazenamento:** Persistir ULID como texto ocupa 26 bytes (mais collation) versus 16 bytes em binário. Em índices grandes a diferença impacta RAM, cache e largura de banda.
 
-Quando o juiz apita, ambos largam juntos. O Time ULID precisa montar e desmontar blocos de Lego a cada troca de bastão (codificar/decodificar base32, alocar strings, normalizar maiúsculas/minúsculas). Isso gasta CPU e RAM em cada geração de ID, porque todo mundo quer transformar o ULID em texto amigável mesmo quando o banco só precisa de 128 bits compactos. Já o Time `Id` só passa o bastão pronto – ele trabalha direto com os bits do UUIDv7, então não tem custo extra de conversão nem garbage collector limpando strings temporárias.
+ULID, assim como slugs, é uma boa camada para não expor o identificador real em URLs públicas. Quando precisamos desse benefício, recomendamos gerar o ULID a partir do timestamp do `Id` para preservar a ordem e evitar page splits nos índices. Em cenários raros onde expor a informação temporal do UUIDv7/ULID é um problema de negócio, devemos avaliar outra estratégia de identificação que não se baseie em UUIDv7 nem em ULID.
 
-Do ponto de vista da corrida (seu sistema em produção):
-
-1. **Monotonicidade:** ULID usa timestamp + aleatório, assim como UUIDv4 melhorado. Ele continua sujeito aos mesmos saltos de ordenação dentro do milissegundo que o `Guid.CreateVersion7()` sem contador. Nosso `Id` acrescenta um contador monotônico por thread exatamente para evitar esse tropeço.
-2. **Aleatoriedade:** ULID mantém um bloco aleatório grande para garantir unicidade, mas não resolve os problemas de sequência determinística quando o relógio oscila. Em termos práticos, os “fantasmas de clock drift” que assustam UUIDv4 também assombram ULID.
-3. **Custo de Geração:** Em benchmarks reais, ULID precisa construir a string Base32 Crockford com 26 caracteres. Cada caractere é um passo a mais de CPU, cada string é memória que o GC terá que recolher. Nosso `Id` gera o UUIDv7 já pronto para o wire format binário e só formata para texto se você realmente pedir.
-4. **Armazenamento:** Gravar ULID como texto desperdiça espaço (26 bytes + collation) contra 16 bytes binários. Em bancos de dados com milhões de linhas, essa “corda de Lego” vira peso morto em RAM, cache e I/O.
-
-**Resumo lúdico:** ULID é ótimo para colar em um quadro branco ou trocar em mensagens humanas. Mas em produção, ele é o cavaleiro com armadura brilhante que esqueceu de verificar o peso da armadura antes de subir no cavalo. Nosso `Id` é o cavaleiro com armadura sob medida: continua leve, monotônico e pronto para batalhas de alta performance.
-
-**Conclusão prática:** ULID não oferece nenhuma vantagem concreta sobre o `Id` quando o critério é geração eficiente, consumo de CPU/RAM e ordenação determinística. Ele compartilha os mesmos pontos fracos dos UUIDv4/ULID sem resolver o problema que já superamos com o contador monotônico do UUIDv7.
+**Conclusão:** adotar ULID como identificador interno não traz ganhos de performance ou ordenação e ainda adiciona custo de serialização. Nosso `Id` mantém o mesmo ganho de transmissão quando necessário (basta formatar sob demanda) e preserva monotonicidade, estabilidade e eficiência.
 
 ⚠️ **Considere `Guid.NewGuid()` apenas se:**
 - Você tem um requisito EXTREMO de minimizar CPU (casos raros)
