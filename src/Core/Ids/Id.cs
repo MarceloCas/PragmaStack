@@ -36,7 +36,7 @@ public readonly struct Id
     // Gera um novo ID monotônico baseado em UUIDv7.
     //
     // CARACTERÍSTICAS:
-    // - Performance: ~10-15 nanosegundos por ID (extremamente rápido)
+    // - Performance: ~73 nanosegundos por ID
     // - Ordenação: IDs são ordenáveis por timestamp (maioria dos casos)
     // - Unicidade: Garantida mesmo em ambientes distribuídos (múltiplas instâncias/servidores)
     // - Thread-safe: Cada thread mantém seu próprio contador, sem necessidade de locks
@@ -46,7 +46,46 @@ public readonly struct Id
     // Os 46 bits aleatórios garantem unicidade entre diferentes threads e instâncias da aplicação.
     public static Id GenerateNewId()
     {
-        long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return GenerateNewId(TimeProvider.System.GetUtcNow());
+    }
+
+    // Gera um novo ID monotônico com TimeProvider customizado (útil para testes com tempo fixo).
+    //
+    // Este overload permite injeção de dependência de tempo, tornando a geração de IDs
+    // completamente testável. Use CustomTimeProvider para testes com tempo fixo.
+    //
+    // Exemplo:
+    //   var fixedTime = new DateTimeOffset(2025, 1, 15, 10, 30, 0, TimeSpan.Zero);
+    //   var timeProvider = new CustomTimeProvider(
+    //       utcNowFunc: _ => fixedTime,
+    //       localTimeZone: null
+    //   );
+    //   var id1 = Id.GenerateNewId(timeProvider);
+    //   var id2 = Id.GenerateNewId(timeProvider);
+    //   // id1 e id2 terão o mesmo timestamp, mas contadores diferentes (0, 1)
+    public static Id GenerateNewId(TimeProvider timeProvider)
+    {
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        return GenerateNewId(now);
+    }
+
+    // Gera um novo ID monotônico com um timestamp específico.
+    //
+    // Este é o método core de geração. Todos os outros overloads delegam para este método.
+    //
+    // COMPORTAMENTO COM DIFERENTES TIMESTAMPS:
+    // 1. Novo milissegundo (timestamp > último): Reinicia o contador para 0
+    // 2. Relógio retrocedeu (timestamp < último): Mantém o último timestamp válido e incrementa o contador (proteção contra clock drift)
+    // 3. Mesmo milissegundo (timestamp == último): Incrementa o contador para diferenciar os IDs
+    //
+    // Exemplo:
+    //   var timestamp = DateTimeOffset.UtcNow;
+    //   var id1 = Id.GenerateNewId(timestamp);
+    //   var id2 = Id.GenerateNewId(timestamp);
+    //   // id1 e id2 terão o mesmo timestamp mas contadores sequenciais (0 e 1)
+    public static Id GenerateNewId(DateTimeOffset dateTimeOffset)
+    {
+        long timestamp = dateTimeOffset.ToUnixTimeMilliseconds();
 
         // CENÁRIO 1: Estamos em um novo milissegundo (caso mais comum)
         // Reiniciamos o contador para garantir que o novo ID seja maior que todos os anteriores
