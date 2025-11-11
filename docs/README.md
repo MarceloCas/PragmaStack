@@ -18,6 +18,9 @@ Funcionalidades essenciais e primitivas que formam a base do framework.
 
 - **Time Providers** - Controle preciso sobre a fonte de tempo em sua aplicação
   - [`CustomTimeProvider`](./packages/core/time-providers/custom-time-provider.md) - Implementação personalizável de TimeProvider para testes e simulações
+  - **Time Providers** - Controle preciso sobre a fonte de tempo em sua aplicação
+- **Ids** - Geração de IDs únicos e consistentes
+  - [`Id`](./packages/core/ids/id.md) - Implementação de IDs com suporte a diferentes estratégias de geração
 
 ### 🔬 Metodologias (`/methodologies`)
 
@@ -31,7 +34,7 @@ Guias completos sobre como medir e avaliar o desempenho de software com precisã
   - Como executar benchmarks corretamente
   - Como interpretar resultados
   - Tabela de referência de métricas
-  
+
 - [`Armadilhas Comuns em Benchmarking`](./methodologies/benchmarking/benchmarking-pitfalls.md) - Erros frequentes a evitar
   - Ambiente de teste inconsistente
   - Falta de repetição
