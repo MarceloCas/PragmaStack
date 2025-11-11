@@ -33,6 +33,7 @@ Em cenários de event sourcing, precisamos garantir que os IDs gerados reflitam 
 - [Impacto na Performance](#-impacto-na-performance)
   - [Por que não usar Guid.CreateVersion7()?](#pergunta-1-por-que-não-usar-guidcreateversion7-do-net-9)
   - [Qual o custo de performance?](#pergunta-2-qual-o-custo-de-performance-de-idgeneratenewid)
+  - [Por que não usar ULID?](#pergunta-3-por-que-o-ulid-não-é-uma-alternativa)
   - [Metodologia de Benchmarks](#-metodologia-de-benchmarks)
 - [Trade-offs](#-tradeoffs)
 - [Exemplos Avançados](#-exemplos-avançados)
@@ -1399,6 +1400,30 @@ Economia: ~10 segundos (67% mais rápido end-to-end)
 - Você está construindo sistemas distribuídos
 - Você quer monotonicidade garantida
 - Você quer melhor performance end-to-end
+
+---
+
+#### **Pergunta 3: Por que o ULID não é uma alternativa?**
+
+> "ULID é uma string bonitinha e ordenável, não dá para usar ela no lugar do `Id`?"
+
+Imagine dois times em uma corrida de revezamento:
+
+- **Time ULID** corre segurando um bastão gigante feito de Lego. Ele é colorido, dá para enxergar de longe e cabe direitinho em uma mochila HTTP/1.1 apertada.
+- **Time `Id`** corre com um bastão de fibra de carbono, já no formato certo para a pista dos bancos de dados.
+
+Quando o juiz apita, ambos largam juntos. O Time ULID precisa montar e desmontar blocos de Lego a cada troca de bastão (codificar/decodificar base32, alocar strings, normalizar maiúsculas/minúsculas). Isso gasta CPU e RAM em cada geração de ID, porque todo mundo quer transformar o ULID em texto amigável mesmo quando o banco só precisa de 128 bits compactos. Já o Time `Id` só passa o bastão pronto – ele trabalha direto com os bits do UUIDv7, então não tem custo extra de conversão nem garbage collector limpando strings temporárias.
+
+Do ponto de vista da corrida (seu sistema em produção):
+
+1. **Monotonicidade:** ULID usa timestamp + aleatório, assim como UUIDv4 melhorado. Ele continua sujeito aos mesmos saltos de ordenação dentro do milissegundo que o `Guid.CreateVersion7()` sem contador. Nosso `Id` acrescenta um contador monotônico por thread exatamente para evitar esse tropeço.
+2. **Aleatoriedade:** ULID mantém um bloco aleatório grande para garantir unicidade, mas não resolve os problemas de sequência determinística quando o relógio oscila. Em termos práticos, os “fantasmas de clock drift” que assustam UUIDv4 também assombram ULID.
+3. **Custo de Geração:** Em benchmarks reais, ULID precisa construir a string Base32 Crockford com 26 caracteres. Cada caractere é um passo a mais de CPU, cada string é memória que o GC terá que recolher. Nosso `Id` gera o UUIDv7 já pronto para o wire format binário e só formata para texto se você realmente pedir.
+4. **Armazenamento:** Gravar ULID como texto desperdiça espaço (26 bytes + collation) contra 16 bytes binários. Em bancos de dados com milhões de linhas, essa “corda de Lego” vira peso morto em RAM, cache e I/O.
+
+**Resumo lúdico:** ULID é ótimo para colar em um quadro branco ou trocar em mensagens humanas. Mas em produção, ele é o cavaleiro com armadura brilhante que esqueceu de verificar o peso da armadura antes de subir no cavalo. Nosso `Id` é o cavaleiro com armadura sob medida: continua leve, monotônico e pronto para batalhas de alta performance.
+
+**Conclusão prática:** ULID não oferece nenhuma vantagem concreta sobre o `Id` quando o critério é geração eficiente, consumo de CPU/RAM e ordenação determinística. Ele compartilha os mesmos pontos fracos dos UUIDv4/ULID sem resolver o problema que já superamos com o contador monotônico do UUIDv7.
 
 ⚠️ **Considere `Guid.NewGuid()` apenas se:**
 - Você tem um requisito EXTREMO de minimizar CPU (casos raros)
