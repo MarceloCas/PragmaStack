@@ -2546,7 +2546,7 @@ result.Print();
 - **[ThreadStatic vs ThreadLocal: Performance Comparison](https://stackoverflow.com/questions/18333885/threadstatic-vs-threadlocal-pros-and-cons)**
   Discussão sobre diferentes estratégias de thread-local storage e suas implicações de performance.
 
-- **[Database Index Fragmentation: Causes and Solutions](https://use-the-index-luke.com/sql/clustering/index-fragmentation)**
+- **[Optimize index maintenance to improve query performance and reduce resource consumption](https://learn.microsoft.com/en-us/sql/relational-databases/indexes/reorganize-and-rebuild-indexes?view=sql-server-ver17)**
   Análise profunda de fragmentação de índices e como IDs sequenciais ajudam.
 
 ---
@@ -2556,8 +2556,8 @@ result.Print();
 - **[BenchmarkDotNet Documentation](https://benchmarkdotnet.org/)**
   Framework usado para benchmarks de performance no .NET.
 
-- **[Understanding B-Tree Index Performance](https://www.postgresql.org/docs/current/btree-implementation.html)**
-  Documentação do PostgreSQL sobre implementação de B-trees e impacto de IDs sequenciais vs aleatórios.
+- **[The basics of B-tree index](https://www.postgresql.fastware.com/pzone/2025-01-understanding-the-mechanics-of-postgresql-b-tree-indexes)**
+  Documentação sobre o funcionamento de B-tree no PostgreSql.
 
 ---
 
@@ -2566,11 +2566,8 @@ result.Print();
 - **[CustomTimeProvider](../time-providers/custom-time-provider.md)**
   TimeProvider customizável para controlar tempo em testes (complementar ao Id).
 
-- **[Princípios de Benchmarking](../../methodologies/benchmarking/benchmarking-principles.md)**
+- **[Princípios de Benchmarking](../../../methodologies/benchmarking/benchmarking-principles.md)**
   Metodologia usada para realizar benchmarks confiáveis.
-
-- **[Padrões de Entidades de Domínio](../../patterns/domain-entities.md)**
-  Como usar `Id` em entidades de domínio com Domain-Driven Design.
 
 ---
 
@@ -2589,18 +2586,15 @@ result.Print();
 - **[Hacker News: UUIDv7 Discussion](https://news.ycombinator.com/item?id=31993603)**
   Discussão da comunidade sobre UUIDv7 e suas vantagens.
 
-- **[Reddit: /r/programming - UUID v7](https://www.reddit.com/r/programming/comments/vp1w5y/uuid_v7/)**
+- **[Reddit: /r/programming - UUID v7](https://www.reddit.com/r/PHP/comments/1gwg4dn/question_about_migrating_uuids_from_v4_to_v7/)**
   Thread com experiências práticas de migração para UUIDv7.
 
 ---
 
 ### Código Fonte de Referência
 
-- **[PragmaStack.Core.Ids.Id Source Code](https://github.com/your-org/pragma-stack/blob/main/src/Core/Ids/Id.cs)**
+- **[PragmaStack.Core.Ids.Id Source Code](../../../../src/Core/Ids/Id.cs)**
   Código fonte completo com comentários detalhados.
-
-- **[UUIDv7 Reference Implementations](https://github.com/uuid6/uuid6-ietf-draft)**
-  Implementações de referência de UUIDv7 em várias linguagens.
 
 ---
 
@@ -2609,18 +2603,16 @@ result.Print();
 ### Para Iniciantes
 1. Comece com [RFC 4122](https://www.rfc-editor.org/rfc/rfc4122.html) seção 1-3 (conceitos básicos de UUID)
 2. Leia [UUID v7 - The New Standard](https://buildkite.com/blog/goodbye-integers-hello-uuids) (explicação didática)
-3. Revise a seção [Como Usar](#-como-usar) deste documento
 
 ### Para Desenvolvedores Experientes
 1. Estude [The Problem with Random UUIDs](https://www.percona.com/blog/2019/11/22/uuids-are-popular-but-bad-for-performance-lets-discuss/) (análise de performance)
 2. Leia [UUIDv7 Draft Specification](https://datatracker.ietf.org/doc/html/draft-peabody-dispatch-new-uuid-format) (especificação completa)
-3. Analise o [código fonte do Id.cs](../../src/Core/Ids/Id.cs) (implementação real)
+3. Analise o [código fonte do Id.cs](../../../../src/Core/Ids/Id.cs) (implementação real)
+
 
 ### Para Arquitetos de Software
-1. Revise [Database Index Fragmentation](https://use-the-index-luke.com/sql/clustering/index-fragmentation) (impacto em sistemas)
+1. Revise - **[The basics of B-tree index](https://www.postgresql.fastware.com/pzone/2025-01-understanding-the-mechanics-of-postgresql-b-tree-indexes)**
+  Documentação sobre o funcionamento de B-tree no PostgreSql.
 2. Estude [Trade-offs](#-tradeoffs) deste documento (decisões de arquitetura)
 3. Considere padrões de migração no [Exemplo 5](#exemplo-5-migração-de-guidnewguid-para-id)
 
----
-
-*Documentação gerada para PragmaStack v1.0 - 2025*
