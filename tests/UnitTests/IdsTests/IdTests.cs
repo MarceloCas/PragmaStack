@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -279,12 +280,61 @@ public class IdTests
     }
 
     [Fact]
+    public void GenerateNewId_CounterOverflow_ShouldSpinWaitAndResetCounter()
+    {
+        // This test uses reflection to force the counter to overflow and verify
+        // that the SpinWaitForNextMillisecond mechanism works correctly.
+        //
+        // Since generating 67M+ IDs in one millisecond is practically impossible,
+        // we manipulate the [ThreadStatic] _counter field directly to simulate
+        // the overflow condition.
+
+        // Arrange - Use reflection to access the private [ThreadStatic] fields
+        var idType = typeof(PragmaStack.Core.Ids.Id);
+        var counterField = idType.GetField("_counter", BindingFlags.NonPublic | BindingFlags.Static);
+        var lastTimestampField = idType.GetField("_lastTimestamp", BindingFlags.NonPublic | BindingFlags.Static);
+
+        counterField.ShouldNotBeNull("_counter field should exist");
+        lastTimestampField.ShouldNotBeNull("_lastTimestamp field should exist");
+
+        // Set counter to just below overflow threshold (0x3FFFFFF = 67,108,863)
+        var overflowThreshold = 0x3FFFFFF;
+        counterField!.SetValue(null, (long)(overflowThreshold - 2));
+
+        // Set a fixed timestamp
+        var fixedTimestamp = new DateTimeOffset(2025, 1, 15, 10, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        lastTimestampField!.SetValue(null, fixedTimestamp);
+
+        // Act - Generate IDs with the same timestamp to trigger overflow
+        // The first call will increment counter to (threshold - 1)
+        // The second call will increment to threshold
+        // The third call will exceed threshold and trigger SpinWaitForNextMillisecond
+        var id1 = PragmaStack.Core.Ids.Id.GenerateNewId(DateTimeOffset.FromUnixTimeMilliseconds(fixedTimestamp));
+        var id2 = PragmaStack.Core.Ids.Id.GenerateNewId(DateTimeOffset.FromUnixTimeMilliseconds(fixedTimestamp));
+        var id3 = PragmaStack.Core.Ids.Id.GenerateNewId(DateTimeOffset.FromUnixTimeMilliseconds(fixedTimestamp));
+
+        // After overflow, SpinWaitForNextMillisecond should wait for system clock to advance
+        // and reset the counter. Let's generate a few more IDs to verify monotonicity.
+        var id4 = PragmaStack.Core.Ids.Id.GenerateNewId();
+        var id5 = PragmaStack.Core.Ids.Id.GenerateNewId();
+
+        // Assert - All IDs should be unique
+        var allIds = new[] { id1, id2, id3, id4, id5 };
+        var uniqueIds = new HashSet<Guid>(allIds.Select(id => id.Value));
+        uniqueIds.Count.ShouldBe(5, "All IDs should be unique");
+
+        // Assert - IDs should maintain monotonicity
+        (id1 < id2).ShouldBeTrue("id1 < id2");
+        (id2 < id3).ShouldBeTrue("id2 < id3 (after overflow and spin-wait)");
+        (id3 < id4).ShouldBeTrue("id3 < id4");
+        (id4 < id5).ShouldBeTrue("id4 < id5");
+    }
+
+    [Fact]
     public void GenerateNewId_ExtremeHighVolume_ShouldMaintainMonotonicity()
     {
         // This test generates a very large number of IDs to verify the system handles
-        // extreme volume scenarios. While unlikely to trigger the counter overflow
-        // (which requires 67M+ IDs in one millisecond), this tests the robustness
-        // of the ID generation under stress.
+        // extreme volume scenarios and maintains monotonicity under stress.
 
         // Arrange & Act - Generate 100K IDs
         var idSet = new HashSet<Guid>();
