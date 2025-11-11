@@ -33,6 +33,7 @@ Em cenários de event sourcing, precisamos garantir que os IDs gerados reflitam 
 - [Impacto na Performance](#-impacto-na-performance)
   - [Por que não usar Guid.CreateVersion7()?](#pergunta-1-por-que-não-usar-guidcreateversion7-do-net-9)
   - [Qual o custo de performance?](#pergunta-2-qual-o-custo-de-performance-de-idgeneratenewid)
+  - [Por que não usar ULID?](#pergunta-3-por-que-o-ulid-não-é-uma-alternativa)
   - [Metodologia de Benchmarks](#-metodologia-de-benchmarks)
 - [Trade-offs](#-tradeoffs)
 - [Exemplos Avançados](#-exemplos-avançados)
@@ -1399,6 +1400,23 @@ Economia: ~10 segundos (67% mais rápido end-to-end)
 - Você está construindo sistemas distribuídos
 - Você quer monotonicidade garantida
 - Você quer melhor performance end-to-end
+
+---
+
+#### **Pergunta 3: Por que o ULID não é uma alternativa?**
+
+> "ULID é curto, legível e ordenável. Podemos adotar no lugar do `Id`?"
+
+ULID resolve um problema diferente do que o `Id` se propõe a solucionar. Ele é excelente para expor chaves em URLs, QR codes ou logs porque o formato Base32 Crockford é compacto e fácil de comunicar. Contudo, quando usamos ULID como identificador principal no banco ou no barramento, herdamos os mesmos custos e riscos do `Guid` aleatório — com alguns acréscimos:
+
+1. **Monotonicidade insuficiente:** ULID combina timestamp + aleatoriedade, como um UUIDv4 com prefixo temporal. Dentro do mesmo milissegundo a ordenação continua instável, exatamente o problema que resolvemos com o contador monotônico por thread do `Id`.
+2. **Sensibilidade a clock drift:** Oscilações de relógio causam buracos ou regressões na sequência, tal como ocorre no UUIDv4. O contador do `Id` impede esse recuo, mantendo a ordenação consistente.
+3. **Custo de geração e parse:** Para aproveitar o formato curto do ULID é preciso codificar/decodificar strings Base32 de 26 caracteres. Cada conversão adiciona alocações e trabalho extra de CPU/GC quando comparado ao `Id`, que trafega em binário e só formata texto sob demanda.
+4. **Armazenamento:** Persistir ULID como texto ocupa 26 bytes (mais collation) versus 16 bytes em binário. Em índices grandes a diferença impacta RAM, cache e largura de banda.
+
+ULID, assim como slugs, é uma boa camada para não expor o identificador real em URLs públicas. Quando precisamos desse benefício, recomendamos gerar o ULID a partir do timestamp do `Id` para preservar a ordem e evitar page splits nos índices. Em cenários raros onde expor a informação temporal do UUIDv7/ULID é um problema de negócio, devemos avaliar outra estratégia de identificação que não se baseie em UUIDv7 nem em ULID.
+
+**Conclusão:** adotar ULID como identificador interno não traz ganhos de performance ou ordenação e ainda adiciona custo de serialização. Nosso `Id` mantém o mesmo ganho de transmissão quando necessário (basta formatar sob demanda) e preserva monotonicidade, estabilidade e eficiência.
 
 ⚠️ **Considere `Guid.NewGuid()` apenas se:**
 - Você tem um requisito EXTREMO de minimizar CPU (casos raros)
