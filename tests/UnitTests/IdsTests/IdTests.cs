@@ -277,4 +277,184 @@ public class IdTests
         var id = PragmaStack.Core.Ids.Id.GenerateNewId(DateTimeOffset.MaxValue);
         id.Value.ShouldNotBe(Guid.Empty);
     }
+
+    [Fact]
+    public void GenerateNewId_ExtremeHighVolume_ShouldMaintainMonotonicity()
+    {
+        // This test generates a very large number of IDs to verify the system handles
+        // extreme volume scenarios. While unlikely to trigger the counter overflow
+        // (which requires 67M+ IDs in one millisecond), this tests the robustness
+        // of the ID generation under stress.
+
+        // Arrange & Act - Generate 100K IDs
+        var idSet = new HashSet<Guid>();
+        var lastId = PragmaStack.Core.Ids.Id.GenerateNewId();
+
+        for (int i = 0; i < 100_000; i++)
+        {
+            var newId = PragmaStack.Core.Ids.Id.GenerateNewId();
+
+            // Assert - All IDs should be unique
+            idSet.Add(newId.Value).ShouldBeTrue($"ID at iteration {i} should be unique");
+
+            // Assert - IDs should be monotonic
+            (lastId < newId).ShouldBeTrue($"IDs should be monotonic at iteration {i}");
+
+            lastId = newId;
+        }
+
+        idSet.Count.ShouldBe(100_000);
+    }
+
+    [Fact]
+    public void FromGuid_ShouldCreateIdFromGuid()
+    {
+        // Arrange
+        var guid = Guid.NewGuid();
+
+        // Act
+        var id = PragmaStack.Core.Ids.Id.FromGuid(guid);
+
+        // Assert
+        id.Value.ShouldBe(guid);
+    }
+
+    [Fact]
+    public void GetHashCode_ForEqualIds_ShouldReturnSameHashCode()
+    {
+        // Arrange
+        var guid = Guid.NewGuid();
+        var id1 = PragmaStack.Core.Ids.Id.FromGuid(guid);
+        var id2 = PragmaStack.Core.Ids.Id.FromGuid(guid);
+
+        // Act
+        var hashCode1 = id1.GetHashCode();
+        var hashCode2 = id2.GetHashCode();
+
+        // Assert
+        hashCode1.ShouldBe(hashCode2);
+    }
+
+    [Fact]
+    public void Equals_WithSameId_ShouldReturnTrue()
+    {
+        // Arrange
+        var guid = Guid.NewGuid();
+        var id1 = PragmaStack.Core.Ids.Id.FromGuid(guid);
+        object id2 = PragmaStack.Core.Ids.Id.FromGuid(guid);
+
+        // Act & Assert
+        id1.Equals(id2).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Equals_WithDifferentId_ShouldReturnFalse()
+    {
+        // Arrange
+        var id1 = PragmaStack.Core.Ids.Id.GenerateNewId();
+        object id2 = PragmaStack.Core.Ids.Id.GenerateNewId();
+
+        // Act & Assert
+        id1.Equals(id2).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Equals_WithNonIdObject_ShouldReturnFalse()
+    {
+        // Arrange
+        var id = PragmaStack.Core.Ids.Id.GenerateNewId();
+        object notAnId = "not an Id";
+
+        // Act & Assert
+        id.Equals(notAnId).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Equals_WithNull_ShouldReturnFalse()
+    {
+        // Arrange
+        var id = PragmaStack.Core.Ids.Id.GenerateNewId();
+
+        // Act & Assert
+        id.Equals(null).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void ImplicitConversion_FromGuidToId_ShouldWork()
+    {
+        // Arrange
+        Guid guid = Guid.NewGuid();
+
+        // Act
+        PragmaStack.Core.Ids.Id id = guid;
+
+        // Assert
+        id.Value.ShouldBe(guid);
+    }
+
+    [Fact]
+    public void EqualityOperator_WithEqualIds_ShouldReturnTrue()
+    {
+        // Arrange
+        var guid = Guid.NewGuid();
+        var id1 = PragmaStack.Core.Ids.Id.FromGuid(guid);
+        var id2 = PragmaStack.Core.Ids.Id.FromGuid(guid);
+
+        // Act & Assert
+        (id1 == id2).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void InequalityOperator_WithDifferentIds_ShouldReturnTrue()
+    {
+        // Arrange
+        var id1 = PragmaStack.Core.Ids.Id.GenerateNewId();
+        var id2 = PragmaStack.Core.Ids.Id.GenerateNewId();
+
+        // Act & Assert
+        (id1 != id2).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void GreaterThanOperator_ShouldCompareCorrectly()
+    {
+        // Arrange
+        var baseTime = new DateTimeOffset(2025, 1, 15, 10, 30, 0, TimeSpan.Zero);
+        var id1 = PragmaStack.Core.Ids.Id.GenerateNewId(baseTime);
+        var id2 = PragmaStack.Core.Ids.Id.GenerateNewId(baseTime.AddMilliseconds(1));
+
+        // Act & Assert
+        (id2 > id1).ShouldBeTrue();
+        (id1 > id2).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void LessThanOrEqualOperator_ShouldCompareCorrectly()
+    {
+        // Arrange
+        var baseTime = new DateTimeOffset(2025, 1, 15, 10, 30, 0, TimeSpan.Zero);
+        var id1 = PragmaStack.Core.Ids.Id.GenerateNewId(baseTime);
+        var id2 = PragmaStack.Core.Ids.Id.GenerateNewId(baseTime.AddMilliseconds(1));
+        var id3 = PragmaStack.Core.Ids.Id.FromGuid(id1.Value); // Equal to id1
+
+        // Act & Assert
+        (id1 <= id2).ShouldBeTrue();
+        (id1 <= id3).ShouldBeTrue();
+        (id2 <= id1).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void GreaterThanOrEqualOperator_ShouldCompareCorrectly()
+    {
+        // Arrange
+        var baseTime = new DateTimeOffset(2025, 1, 15, 10, 30, 0, TimeSpan.Zero);
+        var id1 = PragmaStack.Core.Ids.Id.GenerateNewId(baseTime);
+        var id2 = PragmaStack.Core.Ids.Id.GenerateNewId(baseTime.AddMilliseconds(1));
+        var id3 = PragmaStack.Core.Ids.Id.FromGuid(id2.Value); // Equal to id2
+
+        // Act & Assert
+        (id2 >= id1).ShouldBeTrue();
+        (id2 >= id3).ShouldBeTrue();
+        (id1 >= id2).ShouldBeFalse();
+    }
 }
