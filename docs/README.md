@@ -21,6 +21,8 @@ Funcionalidades essenciais e primitivas que formam a base do framework.
   - **Time Providers** - Controle preciso sobre a fonte de tempo em sua aplicação
 - **Ids** - Geração de IDs únicos e consistentes
   - [`Id`](./packages/core/ids/id.md) - Implementação de IDs com suporte a diferentes estratégias de geração
+- **Registry Versions** - Geração de versões de registros
+  - [`RegistryVersion`](./packages/core/registry-versions/registry-version.md) - Implementação de geração de versão de registro visando performance e solução de problemas comuns como versões monotônicas para optimistic locking
 
 ### 🔬 Metodologias (`/methodologies`)
 
