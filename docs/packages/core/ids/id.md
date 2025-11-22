@@ -35,6 +35,7 @@ Em cenários de event sourcing, precisamos garantir que os IDs gerados reflitam 
   - [Qual o custo de performance?](#pergunta-2-qual-o-custo-de-performance-de-idgeneratenewid)
   - [Por que não usar ULID?](#pergunta-3-por-que-o-ulid-não-é-uma-alternativa)
   - [Metodologia de Benchmarks](#-metodologia-de-benchmarks)
+- [**⚠️ LIMITAÇÃO CRÍTICA: Clock Skew Futuro**](#️-limitação-crítica-clock-skew-futuro)
 - [Trade-offs](#-tradeoffs)
 - [Exemplos Avançados](#-exemplos-avançados)
 - [Referências](#-referências)
@@ -1684,6 +1685,347 @@ Resultado final:
 │                                                                           │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## ⚠️ LIMITAÇÃO CRÍTICA: Clock Skew Futuro
+
+### 🚨 Problema: Relógio Configurado para o Futuro
+
+**Severidade:** Média-Alta (afeta ordenação e pode causar fragmentação de índice)
+
+**Descrição do Problema:**
+
+Se o relógio do sistema for configurado para uma data no futuro e depois corrigido para a data atual, **todos os IDs gerados durante o período "futuro" terão timestamps maiores**, causando dois problemas principais:
+
+1. **Quebra de ordenação temporal**: IDs "futuros" aparecerão como mais recentes, mesmo sendo antigos
+2. **Retorno da fragmentação de índice**: IDs subsequentes (com timestamps corretos) serão inseridos ANTES dos IDs futuros, causando page splits
+
+### 📖 Cenário de Exemplo
+
+```csharp
+// CENÁRIO PROBLEMÁTICO:
+
+// 1. Servidor com relógio configurado para 100 anos no futuro (2125)
+DateTimeOffset.UtcNow;  // 2125-01-15 (FUTURO!)
+
+var id1 = Id.GenerateNewId();
+// id1: timestamp = 4893456000000 (ms desde epoch em 2125)
+//      Formato: 018f9abc-def0-7123-4567-89abcdef0123
+
+// 2. Relógio é corrigido para data atual (2025)
+DateTimeOffset.UtcNow;  // 2025-01-15 (ATUAL)
+
+var id2 = Id.GenerateNewId();
+// id2: timestamp = 1736899200000 (ms desde epoch em 2025)
+//      Formato: 018d1234-5678-7abc-def0-123456789abc
+
+// 3. RESULTADO PERMANENTE:
+Console.WriteLine(id1 > id2);  // ✅ True - id1 é "maior" para sempre!
+
+// ⚠️ PROBLEMAS:
+// - id1 tem timestamp de 2125, id2 tem timestamp de 2025
+// - Ordenação temporal quebrada
+// - Inserção de id2 no banco vai ANTES de id1 no índice
+// - Page splits voltam a acontecer!
+```
+
+### 💥 Impacto Duplo
+
+#### 1️⃣ **Quebra de Ordenação Temporal**
+
+```csharp
+// Event Sourcing: Ordem de eventos corrompida
+var events = new List<DomainEvent>
+{
+    new OrderCreatedEvent { Id = id1 },  // Timestamp: 2125 (futuro!)
+    new OrderPaidEvent { Id = id2 },     // Timestamp: 2025 (correto)
+    new OrderShippedEvent { Id = id3 }   // Timestamp: 2025 (correto)
+};
+
+// Ordenação por Id (que usa timestamp interno)
+var sorted = events.OrderBy(e => e.Id).ToList();
+
+// ⚠️ RESULTADO: sorted[0] = OrderPaidEvent, sorted[1] = OrderShippedEvent, sorted[2] = OrderCreatedEvent
+// Ordem completamente ERRADA! Event sourcing corrompido!
+```
+
+#### 2️⃣ **Fragmentação de Índice Volta a Acontecer**
+
+```csharp
+// Banco de dados: Índice organizado por Id
+
+// Estado do índice ANTES da correção do relógio:
+╔═══════════════════════════════════════════════════════════════╗
+║  Página 1000: [id_futuro_1] [id_futuro_2] [id_futuro_3]      ║
+║               Timestamp: 2125-01-15                           ║
+╚═══════════════════════════════════════════════════════════════╝
+
+// Relógio corrigido, gerando novos IDs:
+var id_novo = Id.GenerateNewId();  // Timestamp: 2025-01-15
+
+// ⚠️ PROBLEMA: id_novo tem timestamp MENOR que id_futuro!
+// Inserção precisa acontecer ANTES dos IDs futuros no índice!
+
+╔═══════════════════════════════════════════════════════════════╗
+║  INSERÇÃO DE id_novo:                                         ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Página 500: [...] [id_antigo_999]                           ║
+║  Página 501: [id_novo] ← INSERE AQUI (timestamp 2025)        ║
+║  ...                                                          ║
+║  Página 1000: [id_futuro_1] [id_futuro_2] [id_futuro_3]      ║
+║               ↑ IDs futuros ficam "no final" do índice       ║
+╚═══════════════════════════════════════════════════════════════╝
+
+// RESULTADO:
+// - IDs novos (timestamp 2025) são inseridos no MEIO do índice
+// - IDs futuros (timestamp 2125) estão no FINAL
+// - PAGE SPLITS acontecem novamente!
+// - Fragmentação de índice VOLTA!
+// - Performance de inserção DEGRADA!
+```
+
+**📊 Impacto na Performance do Banco:**
+
+| Aspecto | Antes do Clock Skew | Depois do Clock Skew |
+|---------|---------------------|----------------------|
+| **Inserções** | Append (final do índice) | Random insert (meio do índice) |
+| **Page Splits** | ~0% | ~30-50% (moderado a alto) |
+| **Performance** | ~150K inserts/seg | ~70K inserts/seg (50% mais lento) |
+| **Fragmentação** | Mínima (<5%) | Moderada (30-50%) |
+
+### 🔴 Padrões Afetados
+
+```csharp
+// ❌ AFETADO 1: Ordenação de entidades
+var orders = await _db.Orders.OrderBy(o => o.Id).ToListAsync();
+// IDs futuros aparecem no final, independente da ordem real de criação
+
+// ❌ AFETADO 2: Queries por range temporal
+var recentOrders = await _db.Orders
+    .Where(o => o.Id > lastProcessedId)  // Assume Id maior = mais recente
+    .ToListAsync();
+// IDs futuros podem ser pulados se lastProcessedId for de período futuro
+
+// ❌ AFETADO 3: Event Sourcing
+var events = await _eventStore.GetEvents(aggregateId);
+var ordered = events.OrderBy(e => e.Id).ToList();
+// Eventos com IDs futuros aparecem fora de ordem
+
+// ❌ AFETADO 4: Índices de banco de dados
+// Inserções subsequentes causam page splits
+// Performance degrada
+// Fragmentação aumenta
+```
+
+### ✅ Padrões NÃO Afetados (Funcionam Normalmente)
+
+```csharp
+// ✅ SEGURO 1: Lookup por ID específico
+var order = await _db.Orders.FindAsync(specificId);
+// Busca por ID específico funciona normalmente
+
+// ✅ SEGURO 2: Unicidade Global
+// IDs continuam únicos, apenas ordenação afetada
+
+// ✅ SEGURO 3: Conversão para Guid
+Guid guid = id;  // Continua funcionando normalmente
+```
+
+### 🛡️ Estratégias de Mitigação
+
+#### 1️⃣ **Prevenção: Sincronização de Relógio** (MESMAS recomendações que RegistryVersion)
+
+**Recomendação:** Use NTP/PTP em TODOS os ambientes.
+
+```bash
+# Cloud Providers (Automático)
+# AWS: Amazon Time Sync Service
+# Azure: Azure Time Sync
+# GCP: Google NTP
+
+# Linux (On-Premise)
+sudo timedatectl set-ntp true
+systemctl enable systemd-timesyncd
+
+# Windows (On-Premise)
+w32tm /config /manualpeerlist:"pool.ntp.org" /syncfromflags:manual /update
+w32tm /resync
+```
+
+#### 2️⃣ **Detecção: Monitoramento de Clock Drift**
+
+```csharp
+/// <summary>
+/// Monitora clock drift durante geração de IDs.
+/// </summary>
+public static class IdMonitoring
+{
+    private static readonly ILogger _logger = LoggerFactory.CreateLogger("IdMonitoring");
+
+    public static Id GenerateWithMonitoring()
+    {
+        var beforeGen = DateTimeOffset.UtcNow;
+        var id = Id.GenerateNewId();
+
+        // Extrair timestamp do ID (primeiros 48 bits)
+        var idBytes = id.Value.ToByteArray();
+        var timestampMs = ExtractTimestamp(idBytes);
+        var idTime = DateTimeOffset.FromUnixTimeMilliseconds(timestampMs);
+
+        var driftMs = (idTime - beforeGen).TotalMilliseconds;
+
+        // Log drift suspeito (> 1 segundo)
+        if (Math.Abs(driftMs) > 1000)
+        {
+            _logger.LogWarning(
+                "Clock drift detected: {Drift}ms. " +
+                "ID timestamp: {IdTime}, Expected: {ExpectedTime}",
+                driftMs, idTime, beforeGen
+            );
+        }
+
+        // Alert CRÍTICO para drift futuro significativo (> 1 minuto)
+        if (driftMs > 60_000)
+        {
+            _logger.LogCritical(
+                "CRITICAL: Clock appears to be {Drift}ms ({DriftMinutes:F1} minutes) in the future! " +
+                "ID timestamp: {IdTime}, Current: {CurrentTime}. " +
+                "This will cause index fragmentation and ordering issues!",
+                driftMs, driftMs / 60_000, idTime, beforeGen
+            );
+
+            Metrics.Gauge("id.clock_drift_ms", driftMs);
+        }
+
+        return id;
+    }
+
+    private static long ExtractTimestamp(byte[] guidBytes)
+    {
+        // UUIDv7: primeiros 48 bits são timestamp em milissegundos
+        // Guid.ToByteArray() retorna em formato little-endian Windows
+        // Precisamos reorganizar os bytes
+
+        // Bytes 0-3: time_low (32 bits)
+        // Bytes 4-5: time_mid (16 bits)
+        // Bytes 6-7: time_hi_and_version (16 bits, mas só 12 bits de timestamp)
+
+        long timestampMs = 0;
+
+        // time_hi (12 bits) - bytes 6-7, ignorar version (4 bits)
+        timestampMs |= ((long)(guidBytes[6] & 0x0F) << 40);  // 12 bits
+        timestampMs |= ((long)guidBytes[7] << 32);
+
+        // time_mid (16 bits) - bytes 4-5
+        timestampMs |= ((long)guidBytes[4] << 24);
+        timestampMs |= ((long)guidBytes[5] << 16);
+
+        // time_low (32 bits) - bytes 0-3
+        timestampMs |= ((long)guidBytes[0] << 8);
+        timestampMs |= ((long)guidBytes[1]);
+        timestampMs |= ((long)guidBytes[2] >> 8);
+        timestampMs |= (guidBytes[3]);
+
+        return timestampMs;
+    }
+}
+```
+
+#### 3️⃣ **Recuperação: Detecção de IDs Futuros**
+
+```csharp
+/// <summary>
+/// Detecta IDs com timestamps futuros no banco de dados.
+/// </summary>
+public class IdAudit
+{
+    public async Task<List<SuspiciousId>> AuditIds()
+    {
+        var suspicious = new List<SuspiciousId>();
+        var now = DateTimeOffset.UtcNow;
+        var nowMs = now.ToUnixTimeMilliseconds();
+        var maxFutureMs = nowMs + TimeSpan.FromMinutes(5).TotalMilliseconds;
+
+        var orders = await _db.Orders.ToListAsync();
+
+        foreach (var order in orders)
+        {
+            var idTimestampMs = ExtractTimestampFromId(order.Id);
+            var idTime = DateTimeOffset.FromUnixTimeMilliseconds(idTimestampMs);
+
+            if (idTimestampMs > maxFutureMs)
+            {
+                suspicious.Add(new SuspiciousId
+                {
+                    EntityId = order.Id,
+                    EntityType = "Order",
+                    IdTimestamp = idTime,
+                    CurrentTime = now,
+                    DriftMinutes = (idTime - now).TotalMinutes
+                });
+            }
+        }
+
+        return suspicious;
+    }
+}
+```
+
+### 📊 Probabilidade de Ocorrência por Ambiente
+
+| Ambiente | Probabilidade | Risco | Impacto |
+|----------|---------------|-------|---------|
+| **Cloud (AWS/Azure/GCP)** | ⬛ Muito Baixa | 🟢 Baixo | Ordenação + Fragmentação moderada |
+| **On-Premise com NTP** | ⬛⬛ Baixa | 🟢 Baixo | Ordenação + Fragmentação moderada |
+| **Containers (Docker/K8s)** | ⬛⬛ Baixa-Média | 🟡 Médio | Ordenação + Fragmentação moderada |
+| **VMs (VMware/Hyper-V)** | ⬛⬛⬛ Média | 🟡 Médio | Ordenação + Fragmentação moderada |
+| **Desenvolvimento/Testes** | ⬛⬛⬛⬛ Média-Alta | 🟠 Alto | Ordenação + Fragmentação alta |
+| **Edge/IoT sem NTP** | ⬛⬛⬛⬛⬛ Alta | 🔴 Muito Alto | Ordenação + Fragmentação severa |
+| **Air-gapped Systems** | ⬛⬛⬛⬛⬛ Muito Alta | 🔴 Muito Alto | Ordenação + Fragmentação severa |
+
+### 💡 Quando Preocupar vs Quando NÃO Preocupar
+
+#### ✅ Você PODE USAR sem preocupação se:
+
+1. **Está em ambiente cloud com NTP automático**
+   - AWS, Azure, GCP têm sincronização automática e confiável
+   - Probabilidade de drift > 1 ano é astronômica
+
+2. **Usa apenas lookup por ID (não ordenação)**
+   ```csharp
+   var order = await _db.Orders.FindAsync(orderId);  // ✅ Seguro
+   ```
+
+3. **Não depende de ordenação estrita por ID**
+   - Tem campo `CreatedAt` separado para ordenação
+   - Usa campos de negócio para ordenação
+
+#### ⚠️ Você DEVE MONITORAR se:
+
+1. **Usa ordenação por ID para queries**
+   ```csharp
+   .OrderBy(e => e.Id)  // ⚠️ Monitorar clock drift
+   ```
+
+2. **Usa Event Sourcing com ordenação por ID do evento**
+   - IDs futuros corrompem sequência de eventos
+
+3. **Tem ambientes edge/IoT sem NTP confiável**
+   - Relógio pode dessincroni zar facilmente
+
+### 🎓 Comparação com RegistryVersion
+
+| Aspecto | Id (UUIDv7) | RegistryVersion |
+|---------|-------------|-----------------|
+| **Usa timestamp?** | ✅ Sim (milissegundos) | ✅ Sim (ticks = 100ns) |
+| **Vulnerável a clock futuro?** | ✅ Sim | ✅ Sim |
+| **Impacto principal** | Ordenação + **Fragmentação de índice** | "Highest version wins" |
+| **Gravidade** | 🟡 **Média-Alta** (afeta performance banco) | 🟠 Alta (corrompe lógica) |
+| **Mitigação** | NTP + Monitoramento | NTP + Validação |
+| **Quando mais crítico** | Event Sourcing + High write volume | Sistemas distribuídos com merge |
+
+**Conclusão:** `Id` é mais afetado que `RegistryVersion` porque além de quebrar ordenação, **volta a causar fragmentação de índice**, eliminando um dos principais benefícios do UUIDv7. Monitoramento de clock drift é ESSENCIAL em produção.
 
 ---
 
