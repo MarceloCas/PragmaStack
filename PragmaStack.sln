@@ -18,6 +18,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{C4F2
 		scripts\clear-solution.sh = scripts\clear-solution.sh
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{437B67E4-FE4C-41D6-9762-4ECE62B5D942}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "MyStore", "MyStore", "{C5332A84-96BE-4D88-831E-386C3A181FD2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,6 +48,7 @@ Global
 		{2523266A-9353-96F6-104C-5BD70E482A05} = {6B0D9C16-B59C-4F81-AEBD-91BB7190DD6D}
 		{9D1DD2CD-7B04-4472-4377-027563F356CA} = {B5DA3264-D734-4E30-84C3-0D83E00709EE}
 		{5DA8E889-98CF-29ED-F1F6-EA6647177338} = {B5DA3264-D734-4E30-84C3-0D83E00709EE}
+		{C5332A84-96BE-4D88-831E-386C3A181FD2} = {437B67E4-FE4C-41D6-9762-4ECE62B5D942}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4A7B9627-AE4B-4D79-AF42-56BDA0881BD0}
