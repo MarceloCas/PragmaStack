@@ -1,7 +1,7 @@
 
 # 🧱 MyStore Cloud-Ready Platform – Arquitetura, Testes e Ordem de Implementação
 
-Este documento descreve **arquitetura**, **estrutura de diretórios** e **ordem sequencial de implementação** da plataforma MyStore, totalmente baseada em `/samples/MyStore`, com foco em ambiente cloud-ready e suite de testes completa.
+Este documento descreve **arquitetura**, **estrutura de diretórios** e **ordem sequencial de implementação** da plataforma MyStore, totalmente baseada em `/samples/MyStore`, com foco em ambiente cloud-ready, storage de blobs e suíte de testes completa.
 
 ---
 
@@ -21,7 +21,7 @@ Este documento descreve **arquitetura**, **estrutura de diretórios** e **ordem 
     /litmus                 # Experimentos de chaos (LitmusChaos)
     /schemas                # AsyncAPI + Avro + JSON Schemas
     /cdc                    # Config do Debezium (connectors)
-    /migration              # Scripts Flyway (opcional, via CI/CD)
+    /migration              # Scripts Flyway (via CI/CD, se optar por centralizar)
     /k3d                    # Config para cluster local
     /cert-manager           # Issuers ACME + Vault + ClusterIssuer
     /mesh                   # Istio configs (Gateway, VirtualServices, DestinationRules)
@@ -29,6 +29,8 @@ Este documento descreve **arquitetura**, **estrutura de diretórios** e **ordem 
     /registry               # Harbor registry automation e config
     /otel                   # Alloy + pipelines OpenTelemetry
     /ci                     # GitHub Actions templates e scripts
+    /storage                # Storage de objetos e volumes
+      /minio                # MinIO (S3-compatible) como blob/object storage local
 
   /apps                     # Aplicações de exemplo (BFF, serviços, front-ends)
     /gateway                # Kong declarative (se quiser separar do infra)
@@ -55,36 +57,58 @@ Este documento descreve **arquitetura**, **estrutura de diretórios** e **ordem 
 
 ---
 
-# 🔍 Ferramentas de Teste Adotadas
+# 🔍 Ferramentas de Plataforma
 
-- **Unit + Integration**
-  - xUnit / NUnit / MSTest (a escolher)
-  - **Testcontainers.NET** para subir PostgreSQL, MongoDB, Kafka, RabbitMQ, etc.
+- **Identidade / Auth**
+  - Keycloak (local)
+  - Entra ID External (cloud)
+  - OAuth2 / OIDC puro
 
-- **Mutation Testing**
-  - **Stryker.NET** para medir a qualidade real dos testes unitários.
+- **Segredos / Certificados**
+  - Hashicorp Vault (Secrets + PKI)
+  - Cert-Manager (ACME + Vault Issuer)
+  - Vault Agent Injector
+  - Cosign (assinatura de imagens)
 
-- **Contract Testing**
-  - **Pact** (pode integrar com broker remoto depois, ex: Pactflow).
+- **Orquestração / Rede**
+  - k3d (Kubernetes local)
+  - Istio (service mesh, mTLS, routing)
+  - Kong Gateway (HTTP/3, API Gateway)
+  - ArgoCD (GitOps)
+  - Argo Rollouts (canary / blue-green)
 
-- **Performance / Carga / Stress**
-  - **k6** para cenários de:
-    - carga em APIs/BFF
-    - provas de resiliência em endpoints
-    - testes em cenários de rollout/canary
+- **Persistência**
+  - PostgreSQL (OLTP)
+  - MongoDB (read models / documentos)
+  - MinIO (blob/object storage, S3-compatible)
 
-- **End-to-End (E2E)**
-  - **Playwright**:
-    - fluxos completos no front (Blazor)
-    - testes cross-browser
-    - integração com pipeline
+- **Mensageria / Streams / CDC**
+  - RabbitMQ (fila + DLQs)
+  - Kafka (streams + Schema Registry)
+  - Debezium (CDC a partir do PostgreSQL)
 
-- **Chaos Engineering**
-  - **LitmusChaos** (infra) acionado a partir de scripts em `/tests/chaos`, para:
-    - falha de nó
-    - interrupção de pod
-    - network latency
-    - quedas de Kafka/Redis/PostgreSQL
+- **Config / Discovery**
+  - Consul (service discovery + KV)
+
+- **Observabilidade**
+  - Grafana Alloy (OTel Collector)
+  - Loki (logs)
+  - Tempo (traces)
+  - Mimir (metrics)
+  - Grafana (dashboards + alertas)
+
+- **Feature Flags e Experimentos**
+  - Unleash (feature flags)
+  - OpenFeature SDK (.NET)
+
+- **Testes**
+  - xUnit/NUnit/MSTest (unit/integration)
+  - Testcontainers.NET (infra nos testes)
+  - Stryker.NET (mutation testing)
+  - Pact (contract testing)
+  - k6 (performance/carga)
+  - Playwright (E2E)
+  - LitmusChaos (chaos engineering)
 
 ---
 
@@ -123,7 +147,7 @@ Ordem pensada para aprendizado incremental, sem travar por dependência de algo 
 2. `/infra/gateway` – instalar Kong Gateway (com HTTP/3)  
 3. Integrar Kong ↔ Cert-Manager  
 4. Integrar Istio ↔ Cert-Manager  
-5. Ativar mTLS STRICT
+5. Ativar mTLS STRICT entre serviços
 
 > Resultado: tráfego interno seguro e HTTP/3 externo funcional.
 
@@ -134,21 +158,24 @@ Ordem pensada para aprendizado incremental, sem travar por dependência de algo 
 1. `/infra/otel` – Alloy Collector  
 2. `/infra/grafana` – Loki + Tempo + Mimir + Grafana  
 3. Instrumentar aplicações .NET com OpenTelemetry  
-4. Criar dashboards pré-prontos
+4. Criar dashboards e alertas básicos
 
 > Resultado: logs, métricas e traces completos.
 
 ---
 
-## 🎯 FASE 5 — Data & Messaging – `/infra`
+## 🎯 FASE 5 — Data, Blob Storage & Messaging – `/infra`
 
 1. Subir PostgreSQL (manifest ou helm)  
 2. Subir MongoDB  
-3. `/infra/cdc` – Kafka + Schema Registry + Debezium  
-4. `/infra/manifests` – RabbitMQ  
-5. Configurar DLQs (Kafka e Rabbit)
+3. `/infra/storage/minio` – subir MinIO (Blob/Object Storage, S3-compatible)  
+   - Configurar buckets da aplicação (ex: `mystore-assets`, `mystore-docs`)  
+   - Integrar MinIO com Vault (credenciais) e Cert-Manager (TLS)  
+4. `/infra/cdc` – Kafka + Schema Registry + Debezium  
+5. `/infra/manifests` – RabbitMQ  
+6. Configurar DLQs (Kafka e Rabbit)
 
-> Resultado: bancos, mensageria e CDC completos.
+> Resultado: bancos transacionais, leitura, blob storage e pipeline de eventos/CDC completos.
 
 ---
 
@@ -156,7 +183,7 @@ Ordem pensada para aprendizado incremental, sem travar por dependência de algo 
 
 1. `/infra/argo` – ArgoCD  
 2. `/infra/argo/rollouts` – Argo Rollouts + Istio  
-3. Conectar GitHub Actions → ArgoCD
+3. Conectar GitHub Actions → ArgoCD (push de manifests/Helm charts)
 
 > Resultado: deploy automatizado, canary, blue/green.
 
@@ -172,7 +199,7 @@ Ordem pensada para aprendizado incremental, sem travar por dependência de algo 
 
 ---
 
-## 🎯 FASE 8 — Suite de Testes Avançados – `/tests` + apps
+## 🎯 FASE 8 — Suite de Testes Avançados – `/tests` + `/apps`
 
 Nesta fase você monta a suíte de testes completa da MyStore.
 
@@ -182,7 +209,7 @@ Nesta fase você monta a suíte de testes completa da MyStore.
    - Projetos de teste unitário por serviço (ex: `Orders.UnitTests`)  
 2. Criar `/tests/integration`:
    - Projetos de integração usando **Testcontainers.NET**  
-   - Subir PostgreSQL/Mongo/Kafka/Rabbit localmente nos testes  
+   - Subir PostgreSQL/Mongo/Kafka/Rabbit/MinIO localmente nos testes  
 3. Integrar estes testes à pipeline do GitHub Actions (`/infra/ci`)
 
 > Resultado: base sólida de unit + integração.
@@ -207,7 +234,7 @@ Nesta fase você monta a suíte de testes completa da MyStore.
    - Ex.: `BFF.Orders.Contracts`, `Orders.Customers.Contracts`  
 2. Definir contracts consumer-driven  
 3. Integrar Pact na pipeline:
-   - Localmente, usar broker simples ou arquivo  
+   - Localmente, usando broker simples ou arquivo  
    - Futuro: integrar com Pactflow
 
 > Resultado: estabilidade de integração entre serviços.
@@ -219,10 +246,10 @@ Nesta fase você monta a suíte de testes completa da MyStore.
 1. Criar `/tests/perf-k6`:
    - Scripts k6 (`*.js` ou `*.ts`) focados em:
      - BFF  
-     - endpoints críticos (checkout, login, search)  
+     - Endpoints críticos (checkout, login, busca, upload para MinIO, etc.)  
 2. Configurar execuções:
    - Local (dev): smoke perf  
-   - Pipeline: smoke perf + eventualmente carga controlada
+   - Pipeline: smoke perf + eventualmente cargas controladas
 
 > Resultado: visibilidade de throughput, latência, percentis, erros.
 
@@ -234,7 +261,8 @@ Nesta fase você monta a suíte de testes completa da MyStore.
    - Projetos Playwright em TypeScript ou C#  
    - Fluxos principais:
      - login  
-     - cadastro cliente  
+     - cadastro de cliente  
+     - upload/download de arquivos (via MinIO)  
      - criação de pedido  
      - checkout  
 2. Integrar com GitHub Actions:
@@ -274,9 +302,10 @@ Nesta fase você monta a suíte de testes completa da MyStore.
 
 # 🏁 RESUMO
 
-- Toda infra fica em **`/samples/MyStore/infra`**.  
+- Toda infra fica em **`/samples/MyStore/infra`** (incluindo MinIO em `/infra/storage/minio`).  
 - Toda aplicação (BFF, serviços, front) fica em **`/samples/MyStore/apps`**.  
 - Toda suíte de testes (unit, mutation, integration, perf, e2e, chaos) fica em **`/samples/MyStore/tests`**.  
+- MinIO é o blob storage oficial local, compatível com S3/Azure Blob/GCS em produção.  
 - A ordem de implementação foi pensada para:
   - Minimizar retrabalho  
   - Permitir aprendizado gradual  
