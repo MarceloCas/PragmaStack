@@ -1,0 +1,207 @@
+# Example Certificate using mkcert ClusterIssuer
+# This certificate will be trusted by your browser (green padlock!)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: example-mkcert-cert
+  namespace: default
+  labels:
+    app.kubernetes.io/name: example-certificate
+    app.kubernetes.io/part-of: mystore-platform
+    cert-type: mkcert
+spec:
+  # Name of the Secret that will store the certificate
+  secretName: example-mkcert-tls
+
+  # Certificate duration
+  duration: 2160h # 90 days
+
+  # Renew certificate this long before expiry
+  renewBefore: 720h # 30 days
+
+  # DNS names for the certificate
+  dnsNames:
+    - example.mystore.local
+    - www.example.mystore.local
+    - api.example.mystore.local
+    # Wildcard also works with mkcert!
+    - "*.example.mystore.local"
+
+  # Subject information
+  subject:
+    organizations:
+      - MyStore
+    organizationalUnits:
+      - Platform Engineering
+    countries:
+      - BR
+
+  # Common Name
+  commonName: example.mystore.local
+
+  # Not a CA certificate
+  isCA: false
+
+  # Private key configuration
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+
+  # Key usages
+  usages:
+    - server auth
+    - client auth
+
+  # Reference to mkcert ClusterIssuer
+  issuerRef:
+    name: mkcert
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# Example: Using this certificate in an Ingress
+# The certificate above will be used automatically
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-mkcert-ingress
+  namespace: default
+  annotations:
+    # cert-manager will automatically create a certificate for this Ingress
+    cert-manager.io/cluster-issuer: mkcert
+    # Optional Kong-specific annotations
+    konghq.com/strip-path: "true"
+    konghq.com/protocols: "https"
+spec:
+  ingressClassName: kong  # or "nginx" depending on your ingress controller
+  tls:
+  - hosts:
+    - example.mystore.local
+    # This references the certificate created above
+    secretName: example-mkcert-tls
+  rules:
+  - host: example.mystore.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx  # Your service name
+            port:
+              number: 80
+---
+# Example: Deployment + Service for testing
+# This creates a simple nginx server to test the certificate
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-nginx
+  namespace: default
+  labels:
+    app: example-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: example-nginx
+  template:
+    metadata:
+      labels:
+        app: example-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: default
+  labels:
+    app: example-nginx
+spec:
+  selector:
+    app: example-nginx
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+---
+# Instructions:
+#
+# 1. Make sure you've run ./setup-mkcert.sh first
+#
+# 2. Apply this file:
+#    kubectl apply -f example-certificate-mkcert.yaml
+#
+# 3. Wait for certificate to be ready:
+#    kubectl wait --for=condition=ready certificate example-mkcert-cert
+#
+# 4. Check resources created:
+#    kubectl get certificate example-mkcert-cert
+#    kubectl get secret example-mkcert-tls
+#    kubectl get ingress example-mkcert-ingress
+#
+# 5. Add to /etc/hosts (Linux/Mac) or C:\Windows\System32\drivers\etc\hosts (Windows):
+#    127.0.0.1 example.mystore.local
+#
+# 6. Port-forward to test (if not using LoadBalancer):
+#    kubectl port-forward svc/kong-proxy -n kong 8443:443
+#
+# 7. Open browser:
+#    https://example.mystore.local:8443
+#
+#    OR if you configured ingress on port 443:
+#    https://example.mystore.local
+#
+# 8. You should see:
+#    - Green padlock 🔒 in browser
+#    - "Connection is secure" message
+#    - Certificate issued by "mkcert [your-computer-name]"
+#    - nginx default page
+#
+# 9. Verify certificate details in browser:
+#    - Click on the padlock
+#    - View certificate
+#    - Should show all the DNS names listed above
+#
+# 10. Test with curl:
+#     curl -v https://example.mystore.local
+#     # Should NOT show certificate error!
+#
+# Cleanup:
+#    kubectl delete -f example-certificate-mkcert.yaml
+#
+# Troubleshooting:
+#
+# - Certificate not ready?
+#   kubectl describe certificate example-mkcert-cert
+#
+# - ClusterIssuer not ready?
+#   kubectl get clusterissuer mkcert
+#   kubectl describe clusterissuer mkcert
+#
+# - Still getting certificate errors in browser?
+#   - Make sure you ran: mkcert -install
+#   - Restart your browser
+#   - Clear browser cache
+#
+# - Can't access the site?
+#   - Check /etc/hosts entry
+#   - Check ingress is running: kubectl get ingress
+#   - Check service: kubectl get svc nginx
+#   - Check pods: kubectl get pods -l app=example-nginx

@@ -1,0 +1,91 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: mkcert
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: clusterissuer
+    app.kubernetes.io/part-of: mystore-platform
+    environment: development
+  annotations:
+    description: "mkcert-based CA for local development with trusted certificates"
+spec:
+  ca:
+    # Secret containing the mkcert CA certificate and key
+    # This secret is created by the setup-mkcert.sh script
+    # It contains the rootCA.pem and rootCA-key.pem from mkcert
+    secretName: mkcert-ca-tls
+---
+# Documentation
+#
+# This ClusterIssuer uses mkcert's local CA to issue certificates
+# that are trusted by your browser and system.
+#
+# Benefits:
+# - Green padlock in browser (no security warnings)
+# - Works offline
+# - Perfect for E2E tests (Playwright, Cypress, Selenium)
+# - Simulates production HTTPS environment
+# - No rate limits (unlike Let's Encrypt)
+#
+# Setup:
+# 1. Install mkcert: https://github.com/FiloSottile/mkcert
+# 2. Run: ./setup-mkcert.sh
+# 3. Use this ClusterIssuer in your Certificate resources
+#
+# Example Certificate:
+#
+# apiVersion: cert-manager.io/v1
+# kind: Certificate
+# metadata:
+#   name: my-app-cert
+#   namespace: default
+# spec:
+#   secretName: my-app-tls
+#   issuerRef:
+#     name: mkcert
+#     kind: ClusterIssuer
+#   dnsNames:
+#     - my-app.mystore.local
+#     - "*.my-app.mystore.local"
+#
+# Example Ingress with automatic certificate:
+#
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: my-app-ingress
+#   annotations:
+#     cert-manager.io/cluster-issuer: mkcert
+# spec:
+#   tls:
+#   - hosts:
+#     - my-app.mystore.local
+#     secretName: my-app-ingress-tls  # Created automatically
+#   rules:
+#   - host: my-app.mystore.local
+#     http:
+#       paths:
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: my-app
+#             port:
+#               number: 80
+#
+# Verification:
+# - kubectl get clusterissuer mkcert
+# - kubectl describe clusterissuer mkcert
+# - kubectl get certificate -A
+#
+# Testing in browser:
+# 1. Add domain to /etc/hosts (Linux/Mac) or C:\Windows\System32\drivers\etc\hosts (Windows):
+#    127.0.0.1 my-app.mystore.local
+# 2. Access https://my-app.mystore.local
+# 3. You should see a green padlock! 🔒
+#
+# Troubleshooting:
+# - If certificate is not trusted, run: mkcert -install
+# - If ClusterIssuer not ready, check secret exists: kubectl get secret mkcert-ca-tls -n cert-manager
+# - View logs: kubectl logs -n cert-manager -l app=cert-manager

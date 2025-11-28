@@ -1,0 +1,85 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-production
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: clusterissuer
+    app.kubernetes.io/part-of: mystore-platform
+    environment: production
+spec:
+  acme:
+    # Let's Encrypt Production server
+    # IMPORTANT: Only use after testing with staging!
+    # Production has strict rate limits (5 certificates per week per domain)
+    server: https://acme-v02.api.letsencrypt.org/directory
+
+    # Email for urgent renewal and security notices
+    # IMPORTANT: Change this to your email!
+    email: your-email@example.com
+
+    # Secret to store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-production-account-key
+
+    # Solvers for ACME challenges
+    solvers:
+    # HTTP-01 challenge solver
+    # This creates a temporary Ingress/Service to prove domain ownership
+    # Works for most cases, requires port 80 accessible from internet
+    - http01:
+        ingress:
+          # Use the default ingress class (will be Kong or nginx)
+          ingressClassName: kong
+          # Optional: add annotations for specific ingress controllers
+          # podTemplate:
+          #   metadata:
+          #     annotations:
+          #       konghq.com/strip-path: "true"
+
+      # Optional: specify which domains this solver applies to
+      # selector:
+      #   dnsNames:
+      #   - 'api.mystore.com.br'
+      #   - '*.api.mystore.com.br'
+
+    # DNS-01 challenge solver (for wildcard certificates)
+    # Uncomment and configure if you need wildcard certs
+    # Requires DNS provider integration (Cloudflare, Route53, etc.)
+    # - dns01:
+    #     cloudflare:
+    #       email: your-cloudflare-email@example.com
+    #       apiTokenSecretRef:
+    #         name: cloudflare-api-token
+    #         key: api-token
+    #   selector:
+    #     dnsNames:
+    #     - '*.mystore.com.br'
+    #     - 'mystore.com.br'
+
+---
+# IMPORTANT NOTES:
+#
+# 1. Rate Limits (Production):
+#    - 5 certificates per week per registered domain
+#    - 50 certificates per week per account
+#    - Always test with staging first!
+#
+# 2. Before using this in production:
+#    - Change the email address
+#    - Test with letsencrypt-staging first
+#    - Ensure your domain DNS points to your cluster
+#    - Ensure ports 80/443 are accessible from internet
+#
+# 3. For wildcard certificates (*.mystore.com):
+#    - Use DNS-01 challenge (HTTP-01 doesn't work for wildcards)
+#    - Configure your DNS provider integration above
+#
+# 4. Monitoring:
+#    - Certificates expire in 90 days
+#    - cert-manager renews at 30 days before expiry
+#    - Monitor certificate expiry with Prometheus/Grafana
+#
+# References:
+# - Rate limits: https://letsencrypt.org/docs/rate-limits/
+# - Challenge types: https://letsencrypt.org/docs/challenge-types/

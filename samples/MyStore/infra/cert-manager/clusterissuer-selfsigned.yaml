@@ -1,0 +1,56 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: clusterissuer
+    app.kubernetes.io/part-of: mystore-platform
+spec:
+  selfSigned: {}
+---
+# Optional: Create a CA certificate for signing other certificates
+# This allows creating a root CA and using it to sign certificates
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: selfsigned-ca
+  namespace: cert-manager
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: ca-certificate
+    app.kubernetes.io/part-of: mystore-platform
+spec:
+  isCA: true
+  commonName: MyStore Self-Signed CA
+  subject:
+    organizations:
+      - MyStore
+    organizationalUnits:
+      - Platform Engineering
+    countries:
+      - BR
+  secretName: selfsigned-ca-tls
+  duration: 87600h # 10 years
+  renewBefore: 8760h # 1 year before expiry
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+# ClusterIssuer that uses the CA certificate created above
+# Use this for creating certificates signed by your own CA
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-ca
+  labels:
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/component: clusterissuer
+    app.kubernetes.io/part-of: mystore-platform
+spec:
+  ca:
+    secretName: selfsigned-ca-tls

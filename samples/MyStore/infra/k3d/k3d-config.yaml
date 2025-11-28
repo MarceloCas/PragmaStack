@@ -1,0 +1,53 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: mystore-cluster
+servers: 1
+agents: 3
+image: rancher/k3s:v1.28.5-k3s1
+ports:
+  - port: 80:80
+    nodeFilters:
+      - loadbalancer
+  - port: 443:443
+    nodeFilters:
+      - loadbalancer
+  - port: 443:443/udp  # HTTP/3 (QUIC) support
+    nodeFilters:
+      - loadbalancer
+  - port: 8080:8080
+    nodeFilters:
+      - loadbalancer
+options:
+  k3d:
+    wait: true
+    timeout: "300s"
+    disableLoadbalancer: false
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*
+      - arg: --disable=servicelb
+        nodeFilters:
+          - server:*
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true
+registries:
+  create:
+    name: mystore-registry
+    host: "0.0.0.0"
+    hostPort: "5000"
+  config: |
+    mirrors:
+      "localhost:5000":
+        endpoint:
+          - http://mystore-registry:5000
+      "harbor.mystore.local":
+        endpoint:
+          - https://harbor.mystore.local
+volumes:
+  - volume: /tmp/k3dvol:/tmp/k3dvol
+    nodeFilters:
+      - all

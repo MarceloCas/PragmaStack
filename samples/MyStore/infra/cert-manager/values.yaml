@@ -1,0 +1,343 @@
+# cert-manager Helm values for MyStore platform
+# Based on: https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml
+
+global:
+  # Priority class for all cert-manager pods
+  priorityClassName: ""
+
+  # Pod security policy
+  podSecurityPolicy:
+    enabled: false
+    useAppArmor: true
+
+  # Configure log level (1-5, higher = more verbose)
+  logLevel: 2
+
+# Install CRDs as part of Helm release
+installCRDs: true
+
+# Replicas for high availability (use 1 for dev, 3+ for prod)
+replicaCount: 1
+
+# Strategy for deployment updates
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Pod disruption budget (useful for HA scenarios)
+podDisruptionBudget:
+  enabled: false
+  # minAvailable: 1
+  # maxUnavailable: 1
+
+# Service account
+serviceAccount:
+  create: true
+  # name: cert-manager
+  annotations: {}
+
+# Enable prometheus monitoring
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: false  # Set to true when Prometheus Operator is installed
+    prometheusInstance: default
+    targetPort: 9402
+    path: /metrics
+    interval: 60s
+    scrapeTimeout: 30s
+
+# Resources for cert-manager controller
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+
+# Node selector
+nodeSelector:
+  kubernetes.io/os: linux
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# === WEBHOOK COMPONENT ===
+webhook:
+  replicaCount: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  podDisruptionBudget:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  tolerations: []
+  affinity: {}
+
+# === CAINJECTOR COMPONENT ===
+# The CA injector automatically injects CA data into webhooks and APIServices
+cainjector:
+  enabled: true
+  replicaCount: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  tolerations: []
+  affinity: {}
+
+# === STARTUPAPICHECK COMPONENT ===
+# This job checks that the API is ready before marking the release as successful
+startupapicheck:
+  enabled: true
+
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  tolerations: []
+  affinity: {}
+
+# === ADDITIONAL CONFIGURATION ===
+
+# Feature gates (experimental features)
+featureGates: ""
+
+# Maximum number of challenges that can be scheduled at once
+maxConcurrentChallenges: 60
+
+# Namespace to watch for resources (empty = all namespaces)
+# namespace: ""
+
+# Leader election namespace
+# leaderElection:
+#   namespace: "kube-system"
+
+# Extra arguments for cert-manager controller
+extraArgs: []
+  # - --dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53
+  # - --dns01-recursive-nameservers-only
+  # - --acme-http01-solver-image=quay.io/jetstack/cert-manager-acmesolver:latest
+
+# Extra environment variables
+extraEnv: []
+# - name: SOME_VAR
+#   value: "some-value"
+
+# Volume mounts for the cert-manager container
+volumeMounts: []
+volumes: []
+
+# ============================================================================
+# 🚀 HTTP/2 and HTTP/3 Configuration Guide for MyStore Platform
+# ============================================================================
+#
+# ⚠️ IMPORTANT: cert-manager ONLY issues TLS certificates.
+#              It does NOT configure HTTP protocols (HTTP/2, HTTP/3, etc.)
+#
+# 📌 Where to Configure HTTP/2 and HTTP/3:
+#
+# 1. 🌐 HTTP/2 Configuration:
+#    Location: Kong Gateway and Istio (Phase 3 - /infra/gateway and /infra/mesh)
+#
+#    Kong Gateway (HTTP/2):
+#    - File: /infra/gateway/kong-values.yaml
+#    - Config:
+#      proxy_listen:
+#        - 0.0.0.0:8000 http2           # HTTP/2 clear text
+#        - 0.0.0.0:8443 http2 ssl       # HTTP/2 over TLS
+#
+#    Istio Gateway (HTTP/2 - enabled by default):
+#    - File: /infra/mesh/istio-gateway.yaml
+#    - HTTP/2 is automatically enabled for all TLS connections
+#    - No additional configuration needed
+#
+# 2. ⚡ HTTP/3 (QUIC) Configuration:
+#    Location: Kong Gateway (Phase 3 - /infra/gateway)
+#    Requirements: Kong 3.0+ (we'll use Kong 3.8+)
+#
+#    Kong Gateway (HTTP/3):
+#    - File: /infra/gateway/kong-values.yaml
+#    - Config:
+#      proxy_listen:
+#        - 0.0.0.0:8443 http2 ssl       # HTTP/2
+#        - 0.0.0.0:8443 http3           # HTTP/3 (QUIC) on same port!
+#
+#    K3D Cluster (UDP port exposure for QUIC):
+#    - File: /infra/k3d/k3d-config.yaml
+#    - Already configured:
+#      ports:
+#        - port: 443:443                # TCP for HTTP/1.1 and HTTP/2
+#        - port: 443:443/udp            # UDP for HTTP/3 (QUIC)
+#
+# 3. 🔒 Certificates (cert-manager's role):
+#    - cert-manager creates TLS certificates
+#    - These certificates work with ALL HTTP protocols:
+#      ✅ HTTP/1.1
+#      ✅ HTTP/2
+#      ✅ HTTP/3 (QUIC)
+#    - Same certificate = all protocols (protocol-agnostic)
+#
+# 📋 Implementation Timeline:
+#    Phase 1.2: cert-manager (YOU ARE HERE) ✅
+#               - Issues certificates only
+#               - No HTTP protocol configuration
+#
+#    Phase 3: Kong + Istio
+#             - Kong: HTTP/2 + HTTP/3 configured
+#             - Istio: HTTP/2 by default
+#             - Both use certificates from cert-manager
+#
+# 🎯 What You'll Configure in Phase 3:
+#
+#    /infra/gateway/kong-values.yaml:
+#    ```yaml
+#    proxy:
+#      http:
+#        enabled: true
+#        servicePort: 80
+#        parameters:
+#          - http2
+#
+#      tls:
+#        enabled: true
+#        servicePort: 443
+#        parameters:
+#          - http2
+#          - http3        # ← HTTP/3 enabled here!
+#
+#      # HTTP/3 specific settings
+#      quic:
+#        enabled: true
+#        port: 443        # Same port as HTTPS (UDP)
+#    ```
+#
+#    /infra/mesh/istio-gateway.yaml:
+#    ```yaml
+#    apiVersion: networking.istio.io/v1beta1
+#    kind: Gateway
+#    metadata:
+#      name: mystore-gateway
+#    spec:
+#      servers:
+#      - port:
+#          number: 443
+#          name: https
+#          protocol: HTTPS    # ← HTTP/2 automatic with HTTPS
+#        tls:
+#          mode: SIMPLE
+#          credentialName: mystore-tls  # ← cert-manager certificate
+#    ```
+#
+# 📚 Additional Resources:
+#    - Kong HTTP/3 docs: https://docs.konghq.com/gateway/latest/production/networking/http3/
+#    - Istio HTTP/2: https://istio.io/latest/docs/reference/config/networking/gateway/
+#    - K3D port mapping: https://k3d.io/v5.6.0/usage/exposing_services/
+#
+# 💡 Testing HTTP/2 and HTTP/3 (Phase 3):
+#
+#    # Test HTTP/2
+#    curl --http2 -v https://api.mystore.local
+#
+#    # Test HTTP/3
+#    curl --http3 -v https://api.mystore.local
+#
+#    # Browser DevTools
+#    # Network tab → Protocol column shows "h2" (HTTP/2) or "h3" (HTTP/3)
+#
+# ============================================================================
