@@ -14,7 +14,7 @@ Neste guia você vai entender:
 ## ⚡ Início Rápido (para os apressados)
 
 ```bash
-# 1. Instalar mkcert (escolha seu método preferido)
+# 1. (OPCIONAL) Instalar mkcert para cadeado verde no navegador
 
 # Windows - Download direto (PowerShell como Admin):
 Invoke-WebRequest -Uri https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-windows-amd64.exe -OutFile mkcert.exe
@@ -29,17 +29,95 @@ Move-Item mkcert.exe C:\Windows\System32\mkcert.exe -Force
 # macOS:
 # brew install mkcert
 
-# 2. No WSL (onde roda K3D), rodar instalador (faz TUDO automaticamente)
+# 2. No WSL (onde roda K3D), rodar instalador
 cd infra/cert-manager
 ./install.sh
 
-# 3. Pronto! Você tem:
+# 3. Verificar qual ClusterIssuer foi criado
+kubectl get clusterissuers
+
+# Se você configurou mkcert no install.sh → ClusterIssuer "mkcert" existe
+# Se NÃO configurou mkcert → Precisa criar self-signed manualmente:
+#   kubectl apply -f clusterissuer-selfsigned.yaml
+
+# 4. Criar certificado wildcard (RECOMENDADO - 1 cert para tudo!)
+
+# Se você tem o ClusterIssuer "mkcert":
+cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mystore-wildcard-cert
+  namespace: default
+spec:
+  secretName: mystore-wildcard-tls
+  issuerRef:
+    name: mkcert
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.mystore.local"
+    - mystore.local
+EOF
+
+# OU se você criou o ClusterIssuer "selfsigned":
+# cat <<EOF | kubectl apply -f -
+# apiVersion: cert-manager.io/v1
+# kind: Certificate
+# metadata:
+#   name: mystore-wildcard-cert
+#   namespace: default
+# spec:
+#   secretName: mystore-wildcard-tls
+#   issuerRef:
+#     name: selfsigned
+#     kind: ClusterIssuer
+#   dnsNames:
+#     - "*.mystore.local"
+#     - mystore.local
+# EOF
+
+# 5. Aguardar e verificar
+kubectl wait --for=condition=ready certificate mystore-wildcard-cert --timeout=60s
+kubectl get certificate mystore-wildcard-cert
+kubectl get secret mystore-wildcard-tls
+
+# 6. Pronto! Você tem:
 # ✅ cert-manager instalado
-# ✅ ClusterIssuer "mkcert" configurado
-# ✅ HTTPS com cadeado verde pronto para usar!
+# ✅ ClusterIssuer configurado
+# ✅ Certificado wildcard válido para TODOS os subdomínios *.mystore.local
+# ✅ Secret "mystore-wildcard-tls" criado e pronto para usar
+
+# ⚠️ IMPORTANTE: O certificado está PRONTO mas ainda não serve HTTPS!
+# Para servir HTTPS, você precisa:
+# - Instalar um Ingress Controller (Kong, nginx, etc.) - próxima fase do tutorial
+# - Criar um Ingress que usa o Secret "mystore-wildcard-tls"
+# Por enquanto, apenas verifique que o certificado foi criado com sucesso.
 ```
 
-**Resultado:** Você terá certificados TLS válidos localmente, igual produção! 🎉
+**Resultado:** Um certificado wildcard que funciona para api.mystore.local, app.mystore.local, admin.mystore.local e qualquer outro subdomínio! 🎉
+
+> **💡 O que você acabou de criar?**
+>
+> Você criou um **Secret** do tipo TLS que contém:
+> - `tls.crt` - Certificado público (chave pública)
+> - `tls.key` - Chave privada
+> - `ca.crt` - Certificado da CA (opcional)
+>
+> **O que esse certificado FAZ:**
+> - ✅ Existe como Secret no Kubernetes
+> - ✅ Pode ser referenciado em Ingress/Gateway
+> - ✅ Será renovado automaticamente pelo cert-manager
+>
+> **O que esse certificado NÃO FAZ:**
+> - ❌ Não serve HTTPS automaticamente
+> - ❌ Não abre porta 443
+> - ❌ Não cria servidor web
+>
+> **Para usar o certificado:**
+> Você precisa de um **Ingress Controller** (Kong, nginx-ingress, Traefik, etc.)
+> que vai **ler o Secret** e **servir HTTPS** usando esse certificado.
+>
+> Isso será configurado nas próximas fases do tutorial! 🚀
 
 > **🪟 Usando WSL2 no Windows?**
 >
@@ -259,7 +337,62 @@ Secret (armazenado separadamente):
 | **Cadeado verde** | ✅ Sim | ✅ Sim | ❌ Não |
 | **Funciona offline** | ✅ Sim | ❌ Não | ✅ Sim |
 | **Requer domínio público** | ❌ Não | ✅ Sim | ❌ Não |
+| **Suporta wildcard** | ✅ Sim | ✅ Sim (DNS-01) | ✅ Sim |
 | **Ideal para** | Dev local + E2E | Staging/Prod | Testes rápidos |
+
+### 🌟 9. Por que usar Certificado Wildcard em Dev Local?
+
+**Certificado Wildcard** = Um certificado que cobre `*.mystore.local` (todos os subdomínios)
+
+**Vantagens:**
+
+1. **1 Certificado para Tudo** 🎯
+   ```
+   *.mystore.local cobre:
+   ✅ api.mystore.local
+   ✅ app.mystore.local
+   ✅ admin.mystore.local
+   ✅ grafana.mystore.local
+   ✅ qualquer-coisa.mystore.local
+   ```
+
+2. **Menos Configuração** ⚡
+   - Não precisa criar 1 certificado por serviço
+   - 1 Secret (`mystore-wildcard-tls`) usado em todos os Ingress/Gateway
+
+3. **Mais Realista** 🏭
+   - Produção geralmente usa wildcards
+   - Simula o ambiente real com fidelidade
+
+4. **Renovação Única** 🔄
+   - cert-manager renova apenas 1 certificado
+   - Todos os serviços atualizam automaticamente
+
+**Exemplo de uso:**
+```yaml
+# Kong Ingress para API
+spec:
+  tls:
+  - hosts:
+    - api.mystore.local
+    secretName: mystore-wildcard-tls  # ← Mesmo Secret!
+
+# Kong Ingress para App
+spec:
+  tls:
+  - hosts:
+    - app.mystore.local
+    secretName: mystore-wildcard-tls  # ← Mesmo Secret!
+
+# Kong Ingress para Admin
+spec:
+  tls:
+  - hosts:
+    - admin.mystore.local
+    secretName: mystore-wildcard-tls  # ← Mesmo Secret!
+```
+
+**Único Secret, múltiplos serviços!** 🚀
 
 ---
 
@@ -383,31 +516,69 @@ O Secret contém:
 # → ClusterIssuer "mkcert" criado ✅
 
 # ═══════════════════════════════════════════════════════
-# PASSO 3: Criar certificado para seu serviço
+# PASSO 3: Verificar ClusterIssuer disponível
 # ═══════════════════════════════════════════════════════
+
+kubectl get clusterissuers
+
+# Você deve ver:
+# - "mkcert" se configurou mkcert no install.sh (RECOMENDADO!)
+# - OU crie "selfsigned" se não configurou mkcert:
+#   kubectl apply -f clusterissuer-selfsigned.yaml
+
+# ═══════════════════════════════════════════════════════
+# PASSO 4: Criar certificado wildcard (RECOMENDADO para dev local)
+# ═══════════════════════════════════════════════════════
+
+# 💡 TIP: Use wildcard (*.mystore.local) para cobrir todos os subdomínios!
+# Assim você usa o MESMO certificado em api.mystore.local, app.mystore.local, etc.
+
+# Se você tem ClusterIssuer "mkcert" (RECOMENDADO - cadeado verde 🔒):
 cat <<EOF | kubectl apply -f -
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: minha-api-cert
+  name: mystore-wildcard-cert
+  namespace: default
 spec:
-  secretName: minha-api-tls
+  secretName: mystore-wildcard-tls
   issuerRef:
-    name: selfsigned
+    name: mkcert
     kind: ClusterIssuer
   dnsNames:
-    - api.mystore.local
+    - "*.mystore.local"      # Wildcard para todos subdomínios
+    - mystore.local          # Domínio raiz também
 EOF
 
-# 4. Aguardar certificado ficar pronto (15-30 segundos)
-kubectl wait --for=condition=ready certificate minha-api-cert
+# OU se você criou ClusterIssuer "selfsigned":
+# cat <<EOF | kubectl apply -f -
+# apiVersion: cert-manager.io/v1
+# kind: Certificate
+# metadata:
+#   name: mystore-wildcard-cert
+#   namespace: default
+# spec:
+#   secretName: mystore-wildcard-tls
+#   issuerRef:
+#     name: selfsigned
+#     kind: ClusterIssuer
+#   dnsNames:
+#     - "*.mystore.local"
+#     - mystore.local
+# EOF
 
-# 5. Usar o certificado no seu Ingress/Gateway
-# O Secret "minha-api-tls" agora existe e pode ser referenciado
-kubectl get secret minha-api-tls
+# 5. Aguardar certificado ficar pronto (15-30 segundos)
+kubectl wait --for=condition=ready certificate mystore-wildcard-cert --timeout=60s
 
-# 6. Ver se está funcionando
-kubectl get certificate minha-api-cert
+# 6. Agora você pode usar este Secret em TODOS os seus serviços!
+# Exemplos:
+# - api.mystore.local → usa mystore-wildcard-tls
+# - app.mystore.local → usa mystore-wildcard-tls
+# - admin.mystore.local → usa mystore-wildcard-tls
+
+# 7. Verificar
+kubectl get certificate mystore-wildcard-cert
+kubectl get secret mystore-wildcard-tls
 # STATUS deve mostrar "True" na coluna READY
 ```
 
@@ -519,23 +690,37 @@ O resto é automático!
 # macOS:
 # brew install mkcert
 
-# 2. Rodar o instalador (faz TUDO automaticamente)
+# 2. Rodar o instalador
 cd infra/cert-manager
 ./install.sh
 
-# 3. Seguir as instruções interativas na tela
-# O script detecta mkcert e configura automaticamente!
+# 3. Criar ClusterIssuer (IMPORTANTE: escolha uma opção)
 
-# 4. Testar (depois de instalado)
+# Opção A: Self-signed (recomendado se não instalou mkcert)
+kubectl apply -f clusterissuer-selfsigned.yaml
+
+# OU Opção B: mkcert (se seguiu o passo 1 e configurou no install.sh)
+# (já criado automaticamente pelo install.sh)
+
+# 4. Verificar ClusterIssuers disponíveis
 kubectl get clusterissuers
-kubectl apply -f example-certificate-mkcert.yaml  # Se usou mkcert
-# OU
-kubectl apply -f example-certificate.yaml  # Se usou self-signed
+
+# 5. Testar criação de certificado
+# Com self-signed:
+kubectl apply -f example-certificate.yaml
+# OU com mkcert:
+kubectl apply -f example-certificate-mkcert.yaml
+
+# 6. Aguardar certificado ficar pronto
+kubectl wait --for=condition=ready certificate -l app.kubernetes.io/part-of=mystore-platform --timeout=60s
+
+# 7. Verificar
+kubectl get certificates
 ```
 
 **Resultado:**
 - ✅ cert-manager instalado e rodando
-- ✅ ClusterIssuer configurado (mkcert ou self-signed)
+- ✅ ClusterIssuer configurado (self-signed ou mkcert)
 - ✅ Pronto para emitir certificados automaticamente!
 
 ---
@@ -559,8 +744,10 @@ infra/cert-manager/
 │   └── clusterissuer-letsencrypt-production.yaml  ← 🌐 Let's Encrypt Production
 │
 └── 📝 Exemplos e Testes
-    ├── example-certificate-mkcert.yaml             ← Exemplo completo com mkcert
-    └── example-certificate.yaml                    ← Exemplo com self-signed
+    ├── example-wildcard-certificate.yaml          ← ⭐ RECOMENDADO: Wildcard com self-signed
+    ├── example-wildcard-certificate-mkcert.yaml   ← ⭐ RECOMENDADO: Wildcard com mkcert
+    ├── example-certificate-mkcert.yaml            ← Exemplo single domain com mkcert
+    └── example-certificate.yaml                   ← Exemplo single domain com self-signed
 ```
 
 **Qual arquivo usar?**
@@ -568,11 +755,13 @@ infra/cert-manager/
 | Arquivo | Quando Usar |
 |---------|-------------|
 | `install.sh` | **SEMPRE** - É o script principal! |
+| `clusterissuer-selfsigned.yaml` | **SEMPRE** - Crie após install.sh (se não usar mkcert) |
 | `clusterissuer-mkcert.yaml` | Se instalou mkcert (cadeado verde 🔒) |
-| `clusterissuer-selfsigned.yaml` | Se não instalou mkcert (mais simples ⚡) |
 | `clusterissuer-letsencrypt-*.yaml` | Staging/Produção com domínio público |
-| `example-certificate-mkcert.yaml` | Testar mkcert |
-| `example-certificate.yaml` | Testar self-signed |
+| `example-wildcard-certificate.yaml` | ⭐ **DEV LOCAL** - 1 cert para todos serviços! |
+| `example-wildcard-certificate-mkcert.yaml` | ⭐ **DEV LOCAL + E2E** - Wildcard confiável |
+| `example-certificate.yaml` | Exemplo single domain (menos prático) |
+| `example-certificate-mkcert.yaml` | Exemplo single domain com mkcert (menos prático) |
 
 ---
 
@@ -617,29 +806,40 @@ helm version
 
 ### Opção 1: Instalação Automática (Recomendado) 🎯
 
-O script `install.sh` faz **TUDO** automaticamente:
+O script `install.sh` instala o cert-manager:
 
 ```bash
-# Apenas execute:
+# Execute o instalador:
 ./install.sh
 
 # O script vai:
 # 1. ✅ Instalar cert-manager via Helm
 # 2. ✅ Detectar se você tem mkcert instalado
 # 3. ✅ Perguntar se quer configurar mkcert (recomendado!)
-# 4. ✅ Ou criar ClusterIssuer self-signed (alternativa)
-# 5. ✅ Mostrar próximos passos
+# 4. ✅ Mostrar próximos passos
+
+# IMPORTANTE: Após instalar, você DEVE criar um ClusterIssuer!
 ```
 
 **Se você já tem mkcert instalado:**
 - O script vai detectar e oferecer configurar automaticamente
 - Apenas responda "Y" quando perguntado
+- O ClusterIssuer "mkcert" será criado automaticamente
 - Pronto! Você terá HTTPS com cadeado verde 🔒
 
 **Se NÃO tem mkcert instalado:**
 - O script vai mostrar como instalar
-- E oferecer criar ClusterIssuer self-signed como alternativa
+- Você precisará criar manualmente o ClusterIssuer self-signed:
+  ```bash
+  kubectl apply -f clusterissuer-selfsigned.yaml
+  ```
 - Você pode instalar mkcert depois e rodar `./setup-mkcert.sh`
+
+**⚠️ IMPORTANTE:** Sempre verifique se você tem pelo menos um ClusterIssuer criado:
+```bash
+kubectl get clusterissuers
+# Se vazio, você precisa criar um! Senão os certificados não serão emitidos.
+```
 
 ### Opção 2: Instalação Manual com mkcert (Passo a Passo) 🔒
 
@@ -1047,6 +1247,84 @@ EOF
 kubectl get certificate nginx-tls -n default
 ```
 
+## 💡 Melhores Práticas para Desenvolvimento Local
+
+### 1. Use Certificado Wildcard ⭐
+
+**Sempre prefira wildcard em ambiente local:**
+
+```bash
+# ✅ RECOMENDADO - Wildcard (1 cert para tudo)
+kubectl apply -f example-wildcard-certificate.yaml
+
+# ❌ NÃO RECOMENDADO - 1 cert por serviço
+# kubectl apply -f api-cert.yaml
+# kubectl apply -f app-cert.yaml
+# kubectl apply -f admin-cert.yaml
+```
+
+**Por quê?**
+- Menos configuração
+- Mais realista (produção usa wildcards)
+- Renovação única e automática
+- Compartilha Secret entre todos serviços
+
+### 2. Prefira mkcert quando possível 🔒
+
+Se você vai rodar testes E2E ou acessar pelo navegador:
+
+```bash
+# Instalar mkcert uma vez
+winget install FiloSottile.mkcert
+
+# Configurar no cluster
+./setup-mkcert.sh
+
+# Usar wildcard com mkcert
+kubectl apply -f example-wildcard-certificate-mkcert.yaml
+```
+
+**Benefícios:**
+- ✅ Cadeado verde no navegador
+- ✅ Testes E2E funcionam sem flags especiais
+- ✅ Simula produção perfeitamente
+
+### 3. Namespace padrão ou dedicado?
+
+Para ambiente local, use `default` namespace para facilitar:
+
+```yaml
+metadata:
+  name: mystore-wildcard-cert
+  namespace: default  # ✅ Simples para dev local
+```
+
+Para produção, use namespaces dedicados por ambiente.
+
+### 4. Verifique sempre os ClusterIssuers
+
+```bash
+# Antes de criar certificados, sempre verificar:
+kubectl get clusterissuers
+
+# Deve mostrar pelo menos um:
+# NAME            READY   AGE
+# selfsigned      True    5m
+# selfsigned-ca   True    5m
+```
+
+### 5. Monitore renovações automáticas
+
+cert-manager renova automaticamente, mas é bom verificar:
+
+```bash
+# Ver quando expira
+kubectl get certificate mystore-wildcard-cert -o jsonpath='{.status.notAfter}'
+
+# Ver quando vai renovar
+kubectl get certificate mystore-wildcard-cert -o jsonpath='{.status.renewalTime}'
+```
+
 ## 🎯 Próximos Passos (FASE 1)
 
 Após instalar cert-manager, seguir a ordem definida em [`mystore-platform-architecture.md`](../mystore-platform-architecture.md):
@@ -1058,6 +1336,56 @@ Após instalar cert-manager, seguir a ordem definida em [`mystore-platform-archi
 5. ⬜ **ci** → `cd ../ci`
 
 ## 🔍 Troubleshooting
+
+### Erro: ClusterIssuer não encontrado (Referenced "ClusterIssuer" not found)
+
+**Sintoma:**
+```
+kubectl wait --for=condition=ready certificate minha-api-cert
+error: timed out waiting for the condition on certificates/minha-api-cert
+```
+
+**Diagnóstico:**
+```bash
+# Ver detalhes do certificado
+kubectl describe certificate minha-api-cert
+
+# Procurar por mensagens como:
+# Message: Referenced "ClusterIssuer" not found: clusterissuer.cert-manager.io "selfsigned" not found
+
+# Listar ClusterIssuers disponíveis
+kubectl get clusterissuers
+```
+
+**Solução:**
+
+Se o ClusterIssuer `selfsigned` não existir, você precisa criá-lo:
+
+```bash
+# Criar o ClusterIssuer self-signed
+kubectl apply -f clusterissuer-selfsigned.yaml
+
+# Verificar se foi criado com sucesso
+kubectl get clusterissuers
+
+# Aguardar o certificado ficar pronto
+kubectl wait --for=condition=ready certificate minha-api-cert --timeout=60s
+```
+
+**Alternativa:** Use um ClusterIssuer existente
+
+```bash
+# Ver quais ClusterIssuers você tem
+kubectl get clusterissuers
+
+# Se você tem "mkcert", pode usar ele
+# Edite seu certificado para referenciar o issuer correto:
+kubectl edit certificate minha-api-cert
+
+# Mude:
+# issuerRef:
+#   name: selfsigned  # ← trocar para "mkcert" se disponível
+```
 
 ### Certificado não fica pronto (READY = False)
 
@@ -1290,3 +1618,40 @@ spec:
 - Para produção, use `letsencrypt-production` (após testar com `staging`)
 - Self-signed certificates são apenas para desenvolvimento local
 - Vault Issuer será configurado na Fase 2 da arquitetura
+
+### 🔑 Diferença entre ClusterIssuers Self-Signed
+
+Quando você cria o arquivo `clusterissuer-selfsigned.yaml`, três recursos são criados:
+
+1. **`selfsigned`** - ClusterIssuer básico
+   - Cria certificados auto-assinados diretamente
+   - Cada certificado é assinado por si mesmo
+   - Use apenas para testes rápidos
+
+2. **`selfsigned-ca`** (Certificate) - Certificado de CA raiz
+   - Certificado CA auto-assinado que dura 10 anos
+   - Criado pelo ClusterIssuer `selfsigned`
+   - Armazenado no Secret `selfsigned-ca-tls`
+
+3. **`selfsigned-ca`** (ClusterIssuer) - ClusterIssuer baseado em CA
+   - Usa o certificado CA acima para assinar outros certificados
+   - **RECOMENDADO** para uso geral
+   - Todos os certificados são assinados pela mesma CA
+
+**Qual usar?**
+```yaml
+# ❌ Não recomendado (cada cert é diferente):
+issuerRef:
+  name: selfsigned
+  kind: ClusterIssuer
+
+# ✅ Recomendado (todos assinados pela mesma CA):
+issuerRef:
+  name: selfsigned-ca
+  kind: ClusterIssuer
+
+# ✅ Melhor para dev (cadeado verde no navegador):
+issuerRef:
+  name: mkcert
+  kind: ClusterIssuer
+```

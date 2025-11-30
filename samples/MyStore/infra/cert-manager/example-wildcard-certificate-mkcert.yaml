@@ -1,0 +1,124 @@
+# Example Wildcard Certificate for MyStore Local Development using mkcert
+# This certificate covers *.mystore.local (all subdomains) with trusted CA
+#
+# Requirements:
+# ✅ mkcert installed and configured
+# ✅ ClusterIssuer 'mkcert' created (run ./setup-mkcert.sh)
+#
+# Benefits:
+# ✅ 1 certificate for ALL services (api, app, admin, etc.)
+# ✅ 1 Secret reused everywhere
+# ✅ Green padlock in browser (trusted certificate!)
+# ✅ Perfect for E2E tests (no certificate warnings)
+#
+# ⚠️ IMPORTANT: This creates only the CERTIFICATE (Secret)
+#    To actually serve HTTPS, you need:
+#    - An Ingress Controller (Kong, nginx, etc.) installed in your cluster
+#    - An Ingress resource that references this certificate's Secret
+#
+#    Without Ingress Controller, the certificate exists but nothing serves HTTPS.
+#    This is NORMAL! Install Kong/nginx in the next steps of the tutorial.
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mystore-wildcard-cert
+  namespace: default
+  labels:
+    app.kubernetes.io/name: wildcard-certificate
+    app.kubernetes.io/part-of: mystore-platform
+  annotations:
+    description: "Wildcard certificate for all *.mystore.local subdomains using mkcert"
+spec:
+  # Name of the Secret that will store the certificate
+  # This Secret will be created automatically by cert-manager
+  # Use this same Secret in ALL your Ingress/Gateway resources!
+  secretName: mystore-wildcard-tls
+
+  # Certificate duration (default: 90 days)
+  duration: 2160h # 90 days
+
+  # Renew certificate this long before expiry (default: 30 days)
+  renewBefore: 720h # 30 days
+
+  # Subject Alternative Names (SANs) - DNS names for the certificate
+  # Wildcard covers: api.mystore.local, app.mystore.local, admin.mystore.local, etc.
+  dnsNames:
+    - "*.mystore.local"   # Wildcard for all subdomains
+    - mystore.local       # Root domain also covered
+
+  # Subject information
+  subject:
+    organizations:
+      - MyStore
+    organizationalUnits:
+      - Platform Engineering
+    countries:
+      - BR
+    localities:
+      - São Paulo
+    provinces:
+      - SP
+
+  # Common Name (CN) - usually the primary domain
+  commonName: "*.mystore.local"
+
+  # Is this a CA certificate?
+  isCA: false
+
+  # Private key configuration
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+
+  # Key usages
+  usages:
+    - server auth  # For HTTPS servers
+    - client auth  # For mTLS client authentication
+
+  # Reference to the Issuer/ClusterIssuer
+  # Using mkcert for trusted local certificates
+  issuerRef:
+    name: mkcert
+    kind: ClusterIssuer
+    group: cert-manager.io
+
+---
+# Verification Commands:
+#
+# 1. Ensure mkcert ClusterIssuer exists:
+#    kubectl get clusterissuer mkcert
+#
+# 2. Apply this wildcard certificate:
+#    kubectl apply -f example-wildcard-certificate-mkcert.yaml
+#
+# 3. Wait for certificate to be ready:
+#    kubectl wait --for=condition=ready certificate mystore-wildcard-cert --timeout=60s
+#
+# 4. Check certificate status:
+#    kubectl get certificate mystore-wildcard-cert
+#    kubectl describe certificate mystore-wildcard-cert
+#
+# 5. View the Secret created:
+#    kubectl get secret mystore-wildcard-tls
+#
+# 6. Inspect the certificate and verify wildcard:
+#    kubectl get secret mystore-wildcard-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -text | grep DNS
+#    # Should show: DNS:*.mystore.local, DNS:mystore.local
+#
+# 7. Verify certificate is trusted by mkcert CA:
+#    kubectl get secret mystore-wildcard-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -issuer
+#    # Should show: issuer=O=mkcert development CA,...
+#
+# 8. Test in browser (after configuring Ingress):
+#    https://api.mystore.local
+#    https://app.mystore.local
+#    # Should show GREEN PADLOCK (trusted certificate!)
+#
+# 9. Use in Kong Ingress (example):
+#    spec:
+#      tls:
+#      - hosts:
+#        - api.mystore.local
+#        secretName: mystore-wildcard-tls

@@ -1,5 +1,18 @@
 # Example Certificate using mkcert ClusterIssuer
 # This certificate will be trusted by your browser (green padlock!)
+#
+# ⚠️ IMPORTANT: This example requires an Ingress Controller (Kong, nginx, etc.)
+#    installed in your cluster to serve HTTPS traffic on port 443.
+#
+#    If you don't have an Ingress Controller yet:
+#    - The certificate will be created successfully
+#    - But you won't be able to access https://example.mystore.local
+#    - You'll get "connection refused" or SSL errors
+#
+#    This is EXPECTED! The certificate is ready, just waiting for Kong/nginx.
+#
+# ✅ To test without Ingress Controller, see: example-certificate-standalone.yaml
+#
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

@@ -1,0 +1,188 @@
+# Example Wildcard Certificate for MyStore Local Development
+# This certificate covers *.mystore.local (all subdomains)
+#
+# Benefits:
+# ✅ 1 certificate for ALL services (api, app, admin, etc.)
+# ✅ 1 Secret reused everywhere
+# ✅ Less configuration, more realistic
+# ✅ Single renewal point
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mystore-wildcard-cert
+  namespace: default
+  labels:
+    app.kubernetes.io/name: wildcard-certificate
+    app.kubernetes.io/part-of: mystore-platform
+  annotations:
+    description: "Wildcard certificate for all *.mystore.local subdomains"
+spec:
+  # Name of the Secret that will store the certificate
+  # This Secret will be created automatically by cert-manager
+  # Use this same Secret in ALL your Ingress/Gateway resources!
+  secretName: mystore-wildcard-tls
+
+  # Certificate duration (default: 90 days)
+  duration: 2160h # 90 days
+
+  # Renew certificate this long before expiry (default: 30 days)
+  renewBefore: 720h # 30 days
+
+  # Subject Alternative Names (SANs) - DNS names for the certificate
+  # Wildcard covers: api.mystore.local, app.mystore.local, admin.mystore.local, etc.
+  dnsNames:
+    - "*.mystore.local"   # Wildcard for all subdomains
+    - mystore.local       # Root domain also covered
+
+  # Subject information
+  subject:
+    organizations:
+      - MyStore
+    organizationalUnits:
+      - Platform Engineering
+    countries:
+      - BR
+    localities:
+      - São Paulo
+    provinces:
+      - SP
+
+  # Common Name (CN) - usually the primary domain
+  commonName: "*.mystore.local"
+
+  # Is this a CA certificate?
+  isCA: false
+
+  # Private key configuration
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+    # For better performance and security, consider ECDSA:
+    # algorithm: ECDSA
+    # size: 256
+
+  # Key usages
+  usages:
+    - server auth  # For HTTPS servers
+    - client auth  # For mTLS client authentication
+
+  # Reference to the Issuer/ClusterIssuer
+  # Change 'selfsigned-ca' to 'mkcert' if you have mkcert configured
+  issuerRef:
+    name: selfsigned-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
+
+---
+# Example: Using the wildcard certificate in Kong Ingress (API)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: default
+  annotations:
+    konghq.com/strip-path: "true"
+spec:
+  ingressClassName: kong
+  tls:
+  - hosts:
+    - api.mystore.local
+    secretName: mystore-wildcard-tls  # ← Same Secret!
+  rules:
+  - host: api.mystore.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 80
+
+---
+# Example: Using the wildcard certificate in Kong Ingress (App)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  namespace: default
+spec:
+  ingressClassName: kong
+  tls:
+  - hosts:
+    - app.mystore.local
+    secretName: mystore-wildcard-tls  # ← Same Secret!
+  rules:
+  - host: app.mystore.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: app-service
+            port:
+              number: 80
+
+---
+# Example: Using the wildcard certificate in Kong Ingress (Admin)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: admin-ingress
+  namespace: default
+spec:
+  ingressClassName: kong
+  tls:
+  - hosts:
+    - admin.mystore.local
+    secretName: mystore-wildcard-tls  # ← Same Secret!
+  rules:
+  - host: admin.mystore.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: admin-service
+            port:
+              number: 80
+
+---
+# Verification Commands:
+#
+# 1. Create ClusterIssuer first (if not exists):
+#    kubectl apply -f clusterissuer-selfsigned.yaml
+#
+# 2. Apply this wildcard certificate:
+#    kubectl apply -f example-wildcard-certificate.yaml
+#
+# 3. Wait for certificate to be ready:
+#    kubectl wait --for=condition=ready certificate mystore-wildcard-cert --timeout=60s
+#
+# 4. Check certificate status:
+#    kubectl get certificate mystore-wildcard-cert
+#    kubectl describe certificate mystore-wildcard-cert
+#
+# 5. View the Secret created:
+#    kubectl get secret mystore-wildcard-tls
+#
+# 6. Inspect the certificate and verify wildcard:
+#    kubectl get secret mystore-wildcard-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -text | grep DNS
+#    # Should show: DNS:*.mystore.local, DNS:mystore.local
+#
+# 7. Test with multiple services:
+#    curl -k https://api.mystore.local
+#    curl -k https://app.mystore.local
+#    curl -k https://admin.mystore.local
+#    # All should use the SAME certificate!
+#
+# 8. View expiry date:
+#    kubectl get secret mystore-wildcard-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -dates
+#
+# 9. List all resources using this certificate:
+#    kubectl get ingress -A -o json | jq -r '.items[] | select(.spec.tls[]?.secretName=="mystore-wildcard-tls") | .metadata.name'
